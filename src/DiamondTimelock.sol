@@ -64,21 +64,14 @@ contract DiamondTimelock is Ownable {
 
     // ============ Events ============
 
-    event DiamondCutProposed(
-        bytes32 indexed proposalId,
-        uint256 executeAfter,
-        address proposer
-    );
+    event DiamondCutProposed(bytes32 indexed proposalId, uint256 executeAfter, address proposer);
 
     event DiamondCutExecuted(bytes32 indexed proposalId);
 
     event DiamondCutCancelled(bytes32 indexed proposalId);
 
     event TransactionProposed(
-        bytes32 indexed proposalId,
-        address indexed target,
-        uint256 executeAfter,
-        address proposer
+        bytes32 indexed proposalId, address indexed target, uint256 executeAfter, address proposer
     );
 
     event TransactionExecuted(bytes32 indexed proposalId);
@@ -117,22 +110,14 @@ contract DiamondTimelock is Ownable {
      * @param _calldata Initialization calldata
      * @return proposalId Unique identifier for this proposal
      */
-    function proposeDiamondCut(
-        IDiamondCut.FacetCut[] calldata _facetCuts,
-        address _init,
-        bytes calldata _calldata
-    ) external onlyOwner returns (bytes32 proposalId) {
+    function proposeDiamondCut(IDiamondCut.FacetCut[] calldata _facetCuts, address _init, bytes calldata _calldata)
+        external
+        onlyOwner
+        returns (bytes32 proposalId)
+    {
         if (_facetCuts.length == 0) revert EmptyFacetCuts();
 
-        proposalId = keccak256(
-            abi.encode(
-                _facetCuts,
-                _init,
-                _calldata,
-                block.timestamp,
-                msg.sender
-            )
-        );
+        proposalId = keccak256(abi.encode(_facetCuts, _init, _calldata, block.timestamp, msg.sender));
 
         uint256 executeAfter = block.timestamp + DELAY;
 
@@ -172,11 +157,7 @@ contract DiamondTimelock is Ownable {
         proposal.executed = true;
 
         // Execute diamond cut
-        IDiamondCut(diamond).diamondCut(
-            proposal.facetCuts,
-            proposal.init,
-            proposal.initCalldata
-        );
+        IDiamondCut(diamond).diamondCut(proposal.facetCuts, proposal.init, proposal.initCalldata);
 
         emit DiamondCutExecuted(proposalId);
     }
@@ -205,15 +186,10 @@ contract DiamondTimelock is Ownable {
      * @param _data Transaction data
      * @return proposalId Unique identifier for this proposal
      */
-    function proposeTransaction(
-        address _target,
-        bytes calldata _data
-    ) external onlyOwner returns (bytes32 proposalId) {
+    function proposeTransaction(address _target, bytes calldata _data) external onlyOwner returns (bytes32 proposalId) {
         if (_target == address(0)) revert ZeroAddress();
 
-        proposalId = keccak256(
-            abi.encode(_target, _data, block.timestamp, msg.sender)
-        );
+        proposalId = keccak256(abi.encode(_target, _data, block.timestamp, msg.sender));
 
         uint256 executeAfter = block.timestamp + DELAY;
 
@@ -248,7 +224,7 @@ contract DiamondTimelock is Ownable {
         proposal.executed = true;
 
         // Execute transaction
-        (bool success, ) = proposal.target.call(proposal.data);
+        (bool success,) = proposal.target.call(proposal.data);
         if (!success) revert TransactionFailed();
 
         emit TransactionExecuted(proposalId);
@@ -276,9 +252,7 @@ contract DiamondTimelock is Ownable {
      * @notice Get proposal details
      * @param proposalId ID of the proposal
      */
-    function getProposal(
-        bytes32 proposalId
-    )
+    function getProposal(bytes32 proposalId)
         external
         view
         returns (
@@ -307,9 +281,7 @@ contract DiamondTimelock is Ownable {
      * @notice Get transaction proposal details
      * @param proposalId ID of the proposal
      */
-    function getTransactionProposal(
-        bytes32 proposalId
-    )
+    function getTransactionProposal(bytes32 proposalId)
         external
         view
         returns (
@@ -339,9 +311,7 @@ contract DiamondTimelock is Ownable {
      * @param proposalId ID of the proposal
      * @return Array of facet cuts
      */
-    function getProposalFacetCuts(
-        bytes32 proposalId
-    ) external view returns (IDiamondCut.FacetCut[] memory) {
+    function getProposalFacetCuts(bytes32 proposalId) external view returns (IDiamondCut.FacetCut[] memory) {
         return proposals[proposalId].facetCuts;
     }
 
@@ -353,12 +323,8 @@ contract DiamondTimelock is Ownable {
     function canExecute(bytes32 proposalId) external view returns (bool) {
         DiamondCutProposal storage proposal = proposals[proposalId];
 
-        return
-            proposal.proposedAt != 0 &&
-            !proposal.executed &&
-            !proposal.cancelled &&
-            block.timestamp >= proposal.executeAfter &&
-            block.timestamp <= proposal.executeAfter + GRACE_PERIOD;
+        return proposal.proposedAt != 0 && !proposal.executed && !proposal.cancelled
+            && block.timestamp >= proposal.executeAfter && block.timestamp <= proposal.executeAfter + GRACE_PERIOD;
     }
 
     /**
@@ -366,17 +332,11 @@ contract DiamondTimelock is Ownable {
      * @param proposalId ID of the proposal
      * @return True if proposal is ready to execute
      */
-    function canExecuteTransaction(
-        bytes32 proposalId
-    ) external view returns (bool) {
+    function canExecuteTransaction(bytes32 proposalId) external view returns (bool) {
         TransactionProposal storage proposal = txProposals[proposalId];
 
-        return
-            proposal.proposedAt != 0 &&
-            !proposal.executed &&
-            !proposal.cancelled &&
-            block.timestamp >= proposal.executeAfter &&
-            block.timestamp <= proposal.executeAfter + GRACE_PERIOD;
+        return proposal.proposedAt != 0 && !proposal.executed && !proposal.cancelled
+            && block.timestamp >= proposal.executeAfter && block.timestamp <= proposal.executeAfter + GRACE_PERIOD;
     }
 
     /**
@@ -384,9 +344,7 @@ contract DiamondTimelock is Ownable {
      * @param proposalId ID of the proposal
      * @return Seconds until execution (0 if ready)
      */
-    function timeUntilExecution(
-        bytes32 proposalId
-    ) external view returns (uint256) {
+    function timeUntilExecution(bytes32 proposalId) external view returns (uint256) {
         DiamondCutProposal storage proposal = proposals[proposalId];
 
         if (proposal.proposedAt == 0) revert ProposalNotFound();
@@ -400,9 +358,7 @@ contract DiamondTimelock is Ownable {
      * @param proposalId ID of the proposal
      * @return Seconds until execution (0 if ready)
      */
-    function timeUntilTransactionExecution(
-        bytes32 proposalId
-    ) external view returns (uint256) {
+    function timeUntilTransactionExecution(bytes32 proposalId) external view returns (uint256) {
         TransactionProposal storage proposal = txProposals[proposalId];
 
         if (proposal.proposedAt == 0) revert ProposalNotFound();

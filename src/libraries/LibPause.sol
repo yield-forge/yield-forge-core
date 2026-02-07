@@ -10,8 +10,7 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
  */
 library LibPause {
     // Unique storage slot for pause state
-    bytes32 constant PAUSE_STORAGE_POSITION =
-        keccak256("yieldforge.pause.storage");
+    bytes32 constant PAUSE_STORAGE_POSITION = keccak256("yieldforge.pause.storage");
 
     struct PauseStorage {
         bool paused;
@@ -57,10 +56,7 @@ library LibPause {
      */
     function requirePauseAuthority() internal view {
         PauseStorage storage ps = pauseStorage();
-        if (
-            msg.sender != LibDiamond.contractOwner() &&
-            msg.sender != ps.pauseGuardian
-        ) {
+        if (msg.sender != LibDiamond.contractOwner() && msg.sender != ps.pauseGuardian) {
             revert NotAuthorized();
         }
     }

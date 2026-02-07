@@ -55,12 +55,7 @@ interface ILiquidityAdapter {
      * @param amount0Used Actual amount of token0 used
      * @param amount1Used Actual amount of token1 used
      */
-    event LiquidityAdded(
-        address indexed caller,
-        uint128 liquidity,
-        uint256 amount0Used,
-        uint256 amount1Used
-    );
+    event LiquidityAdded(address indexed caller, uint128 liquidity, uint256 amount0Used, uint256 amount1Used);
 
     /**
      * @notice Emitted when liquidity is removed through the adapter
@@ -69,12 +64,7 @@ interface ILiquidityAdapter {
      * @param amount0Received Amount of token0 received
      * @param amount1Received Amount of token1 received
      */
-    event LiquidityRemoved(
-        address indexed caller,
-        uint128 liquidity,
-        uint256 amount0Received,
-        uint256 amount1Received
-    );
+    event LiquidityRemoved(address indexed caller, uint128 liquidity, uint256 amount0Received, uint256 amount1Received);
 
     /**
      * @notice Emitted when yield (fees/rewards) is collected
@@ -82,11 +72,7 @@ interface ILiquidityAdapter {
      * @param yield0 Amount of token0 collected as yield
      * @param yield1 Amount of token1 collected as yield
      */
-    event YieldCollected(
-        address indexed caller,
-        uint256 yield0,
-        uint256 yield1
-    );
+    event YieldCollected(address indexed caller, uint256 yield0, uint256 yield1);
 
     // ============================================================
     //                          ERRORS
@@ -132,9 +118,7 @@ interface ILiquidityAdapter {
      * @return amount0Used Actual amount of token0 deposited into the pool
      * @return amount1Used Actual amount of token1 deposited into the pool
      */
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used);
 
@@ -151,10 +135,9 @@ interface ILiquidityAdapter {
      * @return amount0 Amount of token0 received from the pool
      * @return amount1 Amount of token1 received from the pool
      */
-    function removeLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external returns (uint256 amount0, uint256 amount1);
+    function removeLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        returns (uint256 amount0, uint256 amount1);
 
     /**
      * @notice Collect accumulated yield (fees, rewards) from the position
@@ -172,9 +155,7 @@ interface ILiquidityAdapter {
      * @return yield0 Amount of token0 collected as yield
      * @return yield1 Amount of token1 collected as yield
      */
-    function collectYield(
-        bytes calldata params
-    ) external returns (uint256 yield0, uint256 yield1);
+    function collectYield(bytes calldata params) external returns (uint256 yield0, uint256 yield1);
 
     // ============================================================
     //                       VIEW FUNCTIONS
@@ -187,9 +168,7 @@ interface ILiquidityAdapter {
      * @param params Parameters identifying the position
      * @return liquidity Current liquidity amount
      */
-    function getPositionLiquidity(
-        bytes calldata params
-    ) external view returns (uint128 liquidity);
+    function getPositionLiquidity(bytes calldata params) external view returns (uint128 liquidity);
 
     /**
      * @notice Get the token addresses for a pool
@@ -205,9 +184,7 @@ interface ILiquidityAdapter {
      * @return token0 First token address (lower address for Uniswap)
      * @return token1 Second token address
      */
-    function getPoolTokens(
-        bytes calldata params
-    ) external view returns (address token0, address token1);
+    function getPoolTokens(bytes calldata params) external view returns (address token0, address token1);
 
     /**
      * @notice Preview how much tokens would be received for removing liquidity
@@ -222,10 +199,10 @@ interface ILiquidityAdapter {
      * @return amount0 Estimated amount of token0 to receive
      * @return amount1 Estimated amount of token1 to receive
      */
-    function previewRemoveLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external view returns (uint256 amount0, uint256 amount1);
+    function previewRemoveLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        view
+        returns (uint256 amount0, uint256 amount1);
 
     /**
      * @notice Preview liquidity and token amounts for adding liquidity
@@ -244,9 +221,7 @@ interface ILiquidityAdapter {
      * @return amount0Used Actual amount of token0 that will be deposited
      * @return amount1Used Actual amount of token1 that will be deposited
      */
-    function previewAddLiquidity(
-        bytes calldata params
-    )
+    function previewAddLiquidity(bytes calldata params)
         external
         view
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used);
@@ -262,10 +237,7 @@ interface ILiquidityAdapter {
      * @param params Pool parameters
      * @return amount1 Optimal amount of token1 to match the ratio
      */
-    function calculateOptimalAmount1(
-        uint256 amount0,
-        bytes calldata params
-    ) external view returns (uint256 amount1);
+    function calculateOptimalAmount1(uint256 amount0, bytes calldata params) external view returns (uint256 amount1);
 
     /**
      * @notice Calculate optimal amount of token0 for given amount of token1
@@ -275,10 +247,7 @@ interface ILiquidityAdapter {
      * @param params Pool parameters
      * @return amount0 Optimal amount of token0 to match the ratio
      */
-    function calculateOptimalAmount0(
-        uint256 amount1,
-        bytes calldata params
-    ) external view returns (uint256 amount0);
+    function calculateOptimalAmount0(uint256 amount1, bytes calldata params) external view returns (uint256 amount0);
 
     /**
      * @notice Get current pool price information
@@ -288,9 +257,7 @@ interface ILiquidityAdapter {
      * @return sqrtPriceX96 Current sqrt price in Q96 format (Uniswap style)
      * @return tick Current tick (for Uniswap pools)
      */
-    function getPoolPrice(
-        bytes calldata params
-    ) external view returns (uint160 sqrtPriceX96, int24 tick);
+    function getPoolPrice(bytes calldata params) external view returns (uint160 sqrtPriceX96, int24 tick);
 
     /**
      * @notice Get pool fee tier
@@ -299,9 +266,7 @@ interface ILiquidityAdapter {
      * @param params Pool parameters
      * @return fee Fee in hundredths of a bip (e.g., 3000 = 0.3%)
      */
-    function getPoolFee(
-        bytes calldata params
-    ) external view returns (uint24 fee);
+    function getPoolFee(bytes calldata params) external view returns (uint24 fee);
 
     /**
      * @notice Get the protocol identifier string
@@ -340,9 +305,7 @@ interface ILiquidityAdapter {
      * @return amount0 Value of our position in token0
      * @return amount1 Value of our position in token1
      */
-    function getPositionValue(
-        bytes calldata params
-    ) external view returns (uint256 amount0, uint256 amount1);
+    function getPositionValue(bytes calldata params) external view returns (uint256 amount0, uint256 amount1);
 
     /**
      * @notice Get total value locked in the underlying pool
@@ -358,9 +321,7 @@ interface ILiquidityAdapter {
      * @return amount0 Total token0 in the pool
      * @return amount1 Total token1 in the pool
      */
-    function getPoolTotalValue(
-        bytes calldata params
-    ) external view returns (uint256 amount0, uint256 amount1);
+    function getPoolTotalValue(bytes calldata params) external view returns (uint256 amount0, uint256 amount1);
 
     /**
      * @notice Get the address of the underlying protocol's main contract

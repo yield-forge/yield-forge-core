@@ -90,11 +90,7 @@ contract UniswapV3AdapterTest is Test {
     }
 
     function test_V3Adapter_OnlyDiamondCanAddLiquidity() public {
-        bytes memory params = abi.encode(
-            address(0xABC),
-            uint256(100e18),
-            uint256(100e18)
-        );
+        bytes memory params = abi.encode(address(0xABC), uint256(100e18), uint256(100e18));
 
         vm.prank(attacker);
         vm.expectRevert();

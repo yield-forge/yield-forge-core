@@ -60,12 +60,7 @@ contract ApproveAdapter is Script {
 
     function _loadDiamondAddress() internal view returns (address) {
         string memory chainId = vm.toString(block.chainid);
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/deployments/",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/deployments/", chainId, ".json");
 
         string memory json = vm.readFile(path);
         address diamond = vm.parseJsonAddress(json, ".Diamond");

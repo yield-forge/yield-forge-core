@@ -58,11 +58,7 @@ contract LiquidityFacetTest is Test {
         yieldAccumulatorFacet = new YieldAccumulatorFacet();
 
         // Deploy mock adapter
-        mockAdapter = new MockAdapterWithLiquidity(
-            address(token0),
-            address(token1),
-            address(diamond)
-        );
+        mockAdapter = new MockAdapterWithLiquidity(address(token0), address(token1), address(diamond));
 
         // Add facets to Diamond
         _addFacets();
@@ -133,9 +129,7 @@ contract LiquidityFacetTest is Test {
         pauseSelectors[1] = PauseFacet.unpause.selector;
         pauseSelectors[2] = PauseFacet.paused.selector;
         cut[4] = IDiamondCut.FacetCut({
-            facetAddress: address(pauseFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: pauseSelectors
+            facetAddress: address(pauseFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: pauseSelectors
         });
 
         // YieldAccumulatorFacet (syncCheckpoint is called by YT token on mint)
@@ -155,18 +149,12 @@ contract LiquidityFacetTest is Test {
         PoolRegistryFacet(address(diamond)).initialize(treasury);
 
         // Approve adapter and quote token
-        PoolRegistryFacet(address(diamond)).approveAdapter(
-            address(mockAdapter)
-        );
+        PoolRegistryFacet(address(diamond)).approveAdapter(address(mockAdapter));
         PoolRegistryFacet(address(diamond)).approveQuoteToken(address(token0));
 
         // Register pool
         bytes memory poolParams = abi.encode(address(0xB001));
-        poolId = PoolRegistryFacet(address(diamond)).registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(token0)
-        );
+        poolId = PoolRegistryFacet(address(diamond)).registerPool(address(mockAdapter), poolParams, address(token0));
 
         // Mint tokens to user
         token0.mint(user, 10000e18);
@@ -206,12 +194,7 @@ contract LiquidityFacetTest is Test {
         bytes32 fakePoolId = keccak256("fake");
 
         vm.startPrank(user);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LiquidityFacet.PoolDoesNotExist.selector,
-                fakePoolId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LiquidityFacet.PoolDoesNotExist.selector, fakePoolId));
         liquidity().addLiquidity(fakePoolId, 100e18, 100e18);
         vm.stopPrank();
     }
@@ -223,9 +206,7 @@ contract LiquidityFacetTest is Test {
         token0.approve(address(diamond), 100e18);
         token1.approve(address(diamond), 100e18);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(LiquidityFacet.PoolBanned.selector, poolId)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LiquidityFacet.PoolBanned.selector, poolId));
         liquidity().addLiquidity(poolId, 100e18, 100e18);
         vm.stopPrank();
     }
@@ -251,11 +232,7 @@ contract LiquidityFacetTest is Test {
         token0.approve(address(diamond), 100e18);
         token1.approve(address(diamond), 100e18);
 
-        (uint256 liq, uint256 pt, uint256 yt) = liquidity().addLiquidity(
-            poolId,
-            100e18,
-            100e18
-        );
+        (uint256 liq, uint256 pt, uint256 yt) = liquidity().addLiquidity(poolId, 100e18, 100e18);
         vm.stopPrank();
 
         // After: cycle 1 created
@@ -271,8 +248,7 @@ contract LiquidityFacetTest is Test {
         token0.approve(address(diamond), 100e18);
         token1.approve(address(diamond), 100e18);
 
-        (uint256 liq, uint256 ptAmount, uint256 ytAmount) = liquidity()
-            .addLiquidity(poolId, 100e18, 100e18);
+        (uint256 liq, uint256 ptAmount, uint256 ytAmount) = liquidity().addLiquidity(poolId, 100e18, 100e18);
         vm.stopPrank();
 
         // Get PT/YT addresses
@@ -292,10 +268,10 @@ contract LiquidityFacetTest is Test {
         token1.approve(address(diamond), 200e18);
 
         // First add
-        (uint256 liq1, , ) = liquidity().addLiquidity(poolId, 100e18, 100e18);
+        (uint256 liq1,,) = liquidity().addLiquidity(poolId, 100e18, 100e18);
 
         // Second add
-        (uint256 liq2, , ) = liquidity().addLiquidity(poolId, 100e18, 100e18);
+        (uint256 liq2,,) = liquidity().addLiquidity(poolId, 100e18, 100e18);
         vm.stopPrank();
 
         // Total liquidity should be sum
@@ -366,9 +342,7 @@ contract MockAdapterWithLiquidity is ILiquidityAdapter {
         diamond = _diamond;
     }
 
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
@@ -395,41 +369,27 @@ contract MockAdapterWithLiquidity is ILiquidityAdapter {
         return (liquidity, amount0Used, amount1Used);
     }
 
-    function removeLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function removeLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function collectYield(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function collectYield(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTokens(
-        bytes calldata
-    ) external view override returns (address, address) {
+    function getPoolTokens(bytes calldata) external view override returns (address, address) {
         return (token0, token1);
     }
 
-    function supportsPool(
-        bytes calldata
-    ) external pure override returns (bool) {
+    function supportsPool(bytes calldata) external pure override returns (bool) {
         return true;
     }
 
-    function previewRemoveLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function previewRemoveLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPositionLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128) {
+    function getPositionLiquidity(bytes calldata) external pure override returns (uint128) {
         return 0;
     }
 
@@ -442,47 +402,31 @@ contract MockAdapterWithLiquidity is ILiquidityAdapter {
     }
 
     // New interface stubs
-    function previewAddLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
-    function calculateOptimalAmount1(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount1(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function calculateOptimalAmount0(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount0(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function getPoolPrice(
-        bytes calldata
-    ) external pure override returns (uint160, int24) {
+    function getPoolPrice(bytes calldata) external pure override returns (uint160, int24) {
         return (0, 0);
     }
 
-    function getPoolFee(
-        bytes calldata
-    ) external pure override returns (uint24) {
+    function getPoolFee(bytes calldata) external pure override returns (uint24) {
         return 0;
     }
 
-    function getPositionValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPositionValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTotalValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPoolTotalValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 }

@@ -32,22 +32,15 @@ interface IDiamondLoupe {
     /// @notice Get all function selectors for a specific facet
     /// @param _facet Address of the facet contract
     /// @return facetFunctionSelectors_ Array of selectors (bytes4)
-    function facetFunctionSelectors(
-        address _facet
-    ) external view returns (bytes4[] memory facetFunctionSelectors_);
+    function facetFunctionSelectors(address _facet) external view returns (bytes4[] memory facetFunctionSelectors_);
 
     /// @notice Get addresses of all facets in the Diamond
     /// @return facetAddresses_ Array of addresses
-    function facetAddresses()
-        external
-        view
-        returns (address[] memory facetAddresses_);
+    function facetAddresses() external view returns (address[] memory facetAddresses_);
 
     /// @notice Find facet for a specific function selector
     /// @param _functionSelector Function selector (4 bytes)
     /// @return facetAddress_ Facet address or address(0) if not found
     /// @dev Useful for debugging: "which contract handles this function?"
-    function facetAddress(
-        bytes4 _functionSelector
-    ) external view returns (address facetAddress_);
+    function facetAddress(bytes4 _functionSelector) external view returns (address facetAddress_);
 }

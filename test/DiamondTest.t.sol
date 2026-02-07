@@ -28,15 +28,8 @@ contract DiamondTest is Test {
     address user2 = address(0x2);
 
     // Events
-    event DiamondCut(
-        IDiamondCut.FacetCut[] _diamondCut,
-        address _init,
-        bytes _calldata
-    );
-    event OwnershipTransferred(
-        address indexed previousOwner,
-        address indexed newOwner
-    );
+    event DiamondCut(IDiamondCut.FacetCut[] _diamondCut, address _init, bytes _calldata);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     function setUp() public {
         // 1. Deploy DiamondCutFacet
@@ -89,54 +82,36 @@ contract DiamondTest is Test {
     }
 
     function test_DiamondCutFacetIsAdded() public view {
-        address facet = IDiamondLoupe(address(diamond)).facetAddress(
-            IDiamondCut.diamondCut.selector
-        );
-        assertEq(
-            facet,
-            address(diamondCutFacet),
-            "DiamondCutFacet should be at correct address"
-        );
+        address facet = IDiamondLoupe(address(diamond)).facetAddress(IDiamondCut.diamondCut.selector);
+        assertEq(facet, address(diamondCutFacet), "DiamondCutFacet should be at correct address");
     }
 
     function test_AllFacetsAreRegistered() public view {
-        address[] memory facetAddresses = IDiamondLoupe(address(diamond))
-            .facetAddresses();
+        address[] memory facetAddresses = IDiamondLoupe(address(diamond)).facetAddresses();
         assertEq(facetAddresses.length, 3, "Should have 3 facets");
     }
 
     // ============ Loupe Tests ============
 
     function test_FacetsReturnsAllFacets() public view {
-        IDiamondLoupe.Facet[] memory facets = IDiamondLoupe(address(diamond))
-            .facets();
+        IDiamondLoupe.Facet[] memory facets = IDiamondLoupe(address(diamond)).facets();
         assertEq(facets.length, 3, "Should return 3 facets");
 
         // Verify each facet has selectors
         for (uint256 i = 0; i < facets.length; i++) {
-            assertTrue(
-                facets[i].functionSelectors.length > 0,
-                "Each facet should have selectors"
-            );
+            assertTrue(facets[i].functionSelectors.length > 0, "Each facet should have selectors");
         }
     }
 
     function test_FacetFunctionSelectorsReturnsCorrectSelectors() public view {
-        bytes4[] memory selectors = IDiamondLoupe(address(diamond))
-            .facetFunctionSelectors(address(ownershipFacet));
+        bytes4[] memory selectors = IDiamondLoupe(address(diamond)).facetFunctionSelectors(address(ownershipFacet));
         assertEq(selectors.length, 2, "OwnershipFacet should have 2 selectors");
     }
 
     function test_FacetAddressReturnsZeroForUnknownSelector() public view {
         bytes4 unknownSelector = bytes4(keccak256("unknownFunction()"));
-        address facet = IDiamondLoupe(address(diamond)).facetAddress(
-            unknownSelector
-        );
-        assertEq(
-            facet,
-            address(0),
-            "Unknown selector should return address(0)"
-        );
+        address facet = IDiamondLoupe(address(diamond)).facetAddress(unknownSelector);
+        assertEq(facet, address(0), "Unknown selector should return address(0)");
     }
 
     // ============ Ownership Tests ============
@@ -172,17 +147,13 @@ contract DiamondTest is Test {
 
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(mockFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: address(mockFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
 
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
 
         // Verify facet was added
-        address facetAddress = IDiamondLoupe(address(diamond)).facetAddress(
-            MockFacet.getValue.selector
-        );
+        address facetAddress = IDiamondLoupe(address(diamond)).facetAddress(MockFacet.getValue.selector);
         assertEq(facetAddress, address(mockFacet), "MockFacet should be added");
 
         // Call function through diamond
@@ -198,9 +169,7 @@ contract DiamondTest is Test {
 
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(mockFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: address(mockFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
 
@@ -208,9 +177,7 @@ contract DiamondTest is Test {
         MockFacetV2 mockFacetV2 = new MockFacetV2();
 
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(mockFacetV2),
-            action: IDiamondCut.FacetCutAction.Replace,
-            functionSelectors: selectors
+            facetAddress: address(mockFacetV2), action: IDiamondCut.FacetCutAction.Replace, functionSelectors: selectors
         });
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
 
@@ -227,9 +194,7 @@ contract DiamondTest is Test {
 
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(mockFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: address(mockFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
 
@@ -242,9 +207,7 @@ contract DiamondTest is Test {
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
 
         // Verify function no longer exists
-        address facetAddress = IDiamondLoupe(address(diamond)).facetAddress(
-            MockFacet.getValue.selector
-        );
+        address facetAddress = IDiamondLoupe(address(diamond)).facetAddress(MockFacet.getValue.selector);
         assertEq(facetAddress, address(0), "Function should be removed");
 
         // Calling should revert
@@ -259,9 +222,7 @@ contract DiamondTest is Test {
 
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(mockFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: address(mockFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
 
         vm.prank(user1);
@@ -276,14 +237,10 @@ contract DiamondTest is Test {
 
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(ownershipFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: address(ownershipFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
 
-        vm.expectRevert(
-            "LibDiamondCut: Can't add function that already exists"
-        );
+        vm.expectRevert("LibDiamondCut: Can't add function that already exists");
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
     }
 
@@ -301,21 +258,12 @@ contract DiamondTest is Test {
 
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(mockFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: address(mockFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
 
         // Call diamondCut with initialization that sets a value
-        bytes memory initCalldata = abi.encodeWithSelector(
-            DiamondInit.init.selector,
-            999
-        );
-        IDiamondCut(address(diamond)).diamondCut(
-            cut,
-            address(diamondInit),
-            initCalldata
-        );
+        bytes memory initCalldata = abi.encodeWithSelector(DiamondInit.init.selector, 999);
+        IDiamondCut(address(diamond)).diamondCut(cut, address(diamondInit), initCalldata);
 
         // Verify initialization set the value in Diamond's storage context
         uint256 value = MockFacetWithState(address(diamond)).getValue();
@@ -328,13 +276,9 @@ contract DiamondTest is Test {
         uint256 amount = 1 ether;
         vm.deal(address(this), amount);
 
-        (bool success, ) = address(diamond).call{value: amount}("");
+        (bool success,) = address(diamond).call{value: amount}("");
         assertTrue(success, "Diamond should accept ETH");
-        assertEq(
-            address(diamond).balance,
-            amount,
-            "Diamond balance should be 1 ether"
-        );
+        assertEq(address(diamond).balance, amount, "Diamond balance should be 1 ether");
     }
 }
 

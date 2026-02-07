@@ -171,12 +171,7 @@ contract PoolRegistryFacetTest is Test {
     function test_ApproveAdapter_RevertsIfAlreadyApproved() public {
         registry().approveAdapter(address(mockAdapter));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PoolRegistryFacet.AdapterAlreadyApproved.selector,
-                address(mockAdapter)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.AdapterAlreadyApproved.selector, address(mockAdapter)));
         registry().approveAdapter(address(mockAdapter));
     }
 
@@ -223,11 +218,7 @@ contract PoolRegistryFacetTest is Test {
         _setupForPoolRegistration();
 
         bytes memory poolParams = abi.encode(address(0xB001));
-        bytes32 poolId = registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        bytes32 poolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
 
         assertTrue(registry().poolExists(poolId));
         (address t0, address t1) = registry().getPoolTokens(poolId);
@@ -242,11 +233,7 @@ contract PoolRegistryFacetTest is Test {
 
         // Any user can register a pool
         vm.prank(user);
-        bytes32 poolId = registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        bytes32 poolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
 
         assertTrue(registry().poolExists(poolId));
     }
@@ -263,12 +250,7 @@ contract PoolRegistryFacetTest is Test {
         registry().initialize(treasury);
         registry().approveQuoteToken(address(mockToken0));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PoolRegistryFacet.AdapterNotApproved.selector,
-                address(mockAdapter)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.AdapterNotApproved.selector, address(mockAdapter)));
         registry().registerPool(address(mockAdapter), "", address(mockToken0));
     }
 
@@ -276,12 +258,7 @@ contract PoolRegistryFacetTest is Test {
         registry().initialize(treasury);
         registry().approveAdapter(address(mockAdapter));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PoolRegistryFacet.QuoteTokenNotApproved.selector,
-                address(mockToken0)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.QuoteTokenNotApproved.selector, address(mockToken0)));
         registry().registerPool(address(mockAdapter), "", address(mockToken0));
     }
 
@@ -289,34 +266,17 @@ contract PoolRegistryFacetTest is Test {
         _setupForPoolRegistration();
 
         bytes memory poolParams = abi.encode(address(0xB001));
-        bytes32 poolId = registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        bytes32 poolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PoolRegistryFacet.PoolAlreadyExists.selector,
-                poolId
-            )
-        );
-        registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.PoolAlreadyExists.selector, poolId));
+        registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
     }
 
     function test_RegisterPool_RevertsIfPoolPreviouslyBanned() public {
         _setupForPoolRegistration();
 
         bytes memory poolParams = abi.encode(address(0xB002));
-        bytes32 poolId = registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        bytes32 poolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
 
         // Ban the pool
         registry().banPool(poolId);
@@ -325,32 +285,17 @@ contract PoolRegistryFacetTest is Test {
         // Try to re-register the banned pool (with different adapter to test the logic)
         // Actually, same poolId means same adapter + poolParams, so we just test that a banned pool
         // cannot be re-registered
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PoolRegistryFacet.PoolAlreadyExists.selector,
-                poolId
-            )
-        );
-        registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.PoolAlreadyExists.selector, poolId));
+        registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
     }
 
-    function test_RegisterPool_AnyoneCanRegister_ButBannedPoolsBlocked()
-        public
-    {
+    function test_RegisterPool_AnyoneCanRegister_ButBannedPoolsBlocked() public {
         _setupForPoolRegistration();
 
         // User registers a pool
         bytes memory poolParams = abi.encode(address(0xB003));
         vm.prank(user);
-        bytes32 poolId = registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        bytes32 poolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
 
         assertTrue(registry().poolExists(poolId));
 
@@ -359,17 +304,8 @@ contract PoolRegistryFacetTest is Test {
 
         // Another user tries to re-register - should fail
         vm.prank(address(0x4));
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PoolRegistryFacet.PoolAlreadyExists.selector,
-                poolId
-            )
-        );
-        registry().registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(mockToken0)
-        );
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.PoolAlreadyExists.selector, poolId));
+        registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
     }
 
     // ================================================================
@@ -459,12 +395,7 @@ contract PoolRegistryFacetTest is Test {
     function test_SetFeeRecipient_RevertOnDiamondAddress() public {
         registry().initialize(treasury);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                PoolRegistryFacet.InvalidRecipient.selector,
-                address(diamond)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.InvalidRecipient.selector, address(diamond)));
         registry().setFeeRecipient(address(diamond));
     }
 
@@ -481,12 +412,7 @@ contract PoolRegistryFacetTest is Test {
     function _registerTestPool() internal returns (bytes32) {
         _setupForPoolRegistration();
         bytes memory poolParams = abi.encode(address(0xB001));
-        return
-            registry().registerPool(
-                address(mockAdapter),
-                poolParams,
-                address(mockToken0)
-            );
+        return registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
     }
 }
 
@@ -506,47 +432,31 @@ contract MockAdapter is ILiquidityAdapter {
         token1 = _token1;
     }
 
-    function addLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128, uint256, uint256) {
+    function addLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
-    function removeLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function removeLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function collectYield(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function collectYield(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTokens(
-        bytes calldata
-    ) external view override returns (address, address) {
+    function getPoolTokens(bytes calldata) external view override returns (address, address) {
         return (token0, token1);
     }
 
-    function supportsPool(
-        bytes calldata
-    ) external pure override returns (bool) {
+    function supportsPool(bytes calldata) external pure override returns (bool) {
         return true;
     }
 
-    function previewRemoveLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function previewRemoveLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPositionLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128) {
+    function getPositionLiquidity(bytes calldata) external pure override returns (uint128) {
         return 0;
     }
 
@@ -559,47 +469,31 @@ contract MockAdapter is ILiquidityAdapter {
     }
 
     // New interface stubs
-    function previewAddLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
-    function calculateOptimalAmount1(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount1(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function calculateOptimalAmount0(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount0(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function getPoolPrice(
-        bytes calldata
-    ) external pure override returns (uint160, int24) {
+    function getPoolPrice(bytes calldata) external pure override returns (uint160, int24) {
         return (0, 0);
     }
 
-    function getPoolFee(
-        bytes calldata
-    ) external pure override returns (uint24) {
+    function getPoolFee(bytes calldata) external pure override returns (uint24) {
         return 0;
     }
 
-    function getPositionValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPositionValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTotalValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPoolTotalValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 }

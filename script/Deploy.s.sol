@@ -55,51 +55,17 @@ contract Deploy is Script, DeployHelper {
         // 4. Prepare Diamond cut
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](9);
 
-        cut[0] = createCut(
-            address(diamondLoupeFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getDiamondLoupeSelectors()
-        );
-        cut[1] = createCut(
-            address(ownershipFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getOwnershipSelectors()
-        );
-        cut[2] = createCut(
-            address(poolRegistryFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getPoolRegistrySelectors()
-        );
-        cut[3] = createCut(
-            address(liquidityFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getLiquiditySelectors()
-        );
-        cut[4] = createCut(
-            address(yieldAccumulatorFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getYieldAccumulatorSelectors()
-        );
-        cut[5] = createCut(
-            address(redemptionFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getRedemptionSelectors()
-        );
-        cut[6] = createCut(
-            address(yieldForgeMarketFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getYieldForgeMarketSelectors()
-        );
-        cut[7] = createCut(
-            address(pauseFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getPauseSelectors()
-        );
-        cut[8] = createCut(
-            address(ytOrderbookFacet),
-            IDiamondCut.FacetCutAction.Add,
-            getYTOrderbookSelectors()
-        );
+        cut[0] = createCut(address(diamondLoupeFacet), IDiamondCut.FacetCutAction.Add, getDiamondLoupeSelectors());
+        cut[1] = createCut(address(ownershipFacet), IDiamondCut.FacetCutAction.Add, getOwnershipSelectors());
+        cut[2] = createCut(address(poolRegistryFacet), IDiamondCut.FacetCutAction.Add, getPoolRegistrySelectors());
+        cut[3] = createCut(address(liquidityFacet), IDiamondCut.FacetCutAction.Add, getLiquiditySelectors());
+        cut[4] =
+            createCut(address(yieldAccumulatorFacet), IDiamondCut.FacetCutAction.Add, getYieldAccumulatorSelectors());
+        cut[5] = createCut(address(redemptionFacet), IDiamondCut.FacetCutAction.Add, getRedemptionSelectors());
+        cut[6] =
+            createCut(address(yieldForgeMarketFacet), IDiamondCut.FacetCutAction.Add, getYieldForgeMarketSelectors());
+        cut[7] = createCut(address(pauseFacet), IDiamondCut.FacetCutAction.Add, getPauseSelectors());
+        cut[8] = createCut(address(ytOrderbookFacet), IDiamondCut.FacetCutAction.Add, getYTOrderbookSelectors());
 
         // 5. Execute Diamond cut
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
@@ -114,10 +80,7 @@ contract Deploy is Script, DeployHelper {
         console.log("Pool Guardian set to:", poolGuardian);
 
         // 8. Deploy Timelock (but don't transfer ownership yet - separate step/manual)
-        DiamondTimelock timelock = new DiamondTimelock(
-            address(diamond),
-            deployer
-        );
+        DiamondTimelock timelock = new DiamondTimelock(address(diamond), deployer);
         console.log("DiamondTimelock deployed at:", address(timelock));
 
         // Note: Transferring ownership to timelock should be a manual step or separate script to ensure verification first.
@@ -128,49 +91,20 @@ contract Deploy is Script, DeployHelper {
 
         vm.serializeAddress(json, "Diamond", address(diamond));
         vm.serializeAddress(json, "DiamondCutFacet", address(diamondCutFacet));
-        vm.serializeAddress(
-            json,
-            "DiamondLoupeFacet",
-            address(diamondLoupeFacet)
-        );
+        vm.serializeAddress(json, "DiamondLoupeFacet", address(diamondLoupeFacet));
         vm.serializeAddress(json, "OwnershipFacet", address(ownershipFacet));
-        vm.serializeAddress(
-            json,
-            "PoolRegistryFacet",
-            address(poolRegistryFacet)
-        );
+        vm.serializeAddress(json, "PoolRegistryFacet", address(poolRegistryFacet));
         vm.serializeAddress(json, "LiquidityFacet", address(liquidityFacet));
-        vm.serializeAddress(
-            json,
-            "YieldAccumulatorFacet",
-            address(yieldAccumulatorFacet)
-        );
+        vm.serializeAddress(json, "YieldAccumulatorFacet", address(yieldAccumulatorFacet));
         vm.serializeAddress(json, "RedemptionFacet", address(redemptionFacet));
-        vm.serializeAddress(
-            json,
-            "YieldForgeMarketFacet",
-            address(yieldForgeMarketFacet)
-        );
+        vm.serializeAddress(json, "YieldForgeMarketFacet", address(yieldForgeMarketFacet));
         vm.serializeAddress(json, "PauseFacet", address(pauseFacet));
-        vm.serializeAddress(
-            json,
-            "YTOrderbookFacet",
-            address(ytOrderbookFacet)
-        );
+        vm.serializeAddress(json, "YTOrderbookFacet", address(ytOrderbookFacet));
         vm.serializeAddress(json, "DiamondTimelock", address(timelock));
 
-        string memory finalJson = vm.serializeAddress(
-            json,
-            "FeeRecipient",
-            feeRecipient
-        );
+        string memory finalJson = vm.serializeAddress(json, "FeeRecipient", feeRecipient);
 
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/deployments/",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/deployments/", chainId, ".json");
         vm.writeJson(finalJson, path);
         console.log("Deployment artifacts saved to:", path);
 

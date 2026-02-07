@@ -12,9 +12,7 @@ import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SqrtPriceMath} from "v4-core/libraries/SqrtPriceMath.sol";
 
 /**
@@ -130,25 +128,11 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     //                        EVENTS
     // ============================================================
 
-    event V4LiquidityAdded(
-        PoolId indexed poolId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
+    event V4LiquidityAdded(PoolId indexed poolId, uint128 liquidity, uint256 amount0, uint256 amount1);
 
-    event V4LiquidityRemoved(
-        PoolId indexed poolId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
+    event V4LiquidityRemoved(PoolId indexed poolId, uint128 liquidity, uint256 amount0, uint256 amount1);
 
-    event V4YieldCollected(
-        PoolId indexed poolId,
-        uint256 yield0,
-        uint256 yield1
-    );
+    event V4YieldCollected(PoolId indexed poolId, uint256 yield0, uint256 yield1);
 
     // ============================================================
     //                       CONSTRUCTOR
@@ -201,42 +185,27 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return amount0Used Actual token0 deposited
      * @return amount1Used Actual token1 deposited
      */
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         override
         onlyDiamond
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
         // Decode parameters
-        (PoolKey memory poolKey, uint256 amount0, uint256 amount1) = abi.decode(
-            params,
-            (PoolKey, uint256, uint256)
-        );
+        (PoolKey memory poolKey, uint256 amount0, uint256 amount1) = abi.decode(params, (PoolKey, uint256, uint256));
 
         // Transfer tokens from Diamond to this adapter
         // Diamond has already approved these tokens to this adapter
         if (amount0 > 0) {
-            IERC20(Currency.unwrap(poolKey.currency0)).safeTransferFrom(
-                diamond,
-                address(this),
-                amount0
-            );
+            IERC20(Currency.unwrap(poolKey.currency0)).safeTransferFrom(diamond, address(this), amount0);
         }
         if (amount1 > 0) {
-            IERC20(Currency.unwrap(poolKey.currency1)).safeTransferFrom(
-                diamond,
-                address(this),
-                amount1
-            );
+            IERC20(Currency.unwrap(poolKey.currency1)).safeTransferFrom(diamond, address(this), amount1);
         }
 
         // Calculate full range ticks aligned to tickSpacing
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         // Prepare callback data
         CallbackData memory data = CallbackData({
@@ -254,17 +223,9 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
         bytes memory result = poolManager.unlock(abi.encode(data));
 
         // Decode results
-        (liquidity, amount0Used, amount1Used) = abi.decode(
-            result,
-            (uint128, uint256, uint256)
-        );
+        (liquidity, amount0Used, amount1Used) = abi.decode(result, (uint128, uint256, uint256));
 
-        emit V4LiquidityAdded(
-            poolKey.toId(),
-            liquidity,
-            amount0Used,
-            amount1Used
-        );
+        emit V4LiquidityAdded(poolKey.toId(), liquidity, amount0Used, amount1Used);
         emit LiquidityAdded(diamond, liquidity, amount0Used, amount1Used);
     }
 
@@ -277,18 +238,18 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return amount0 Token0 received from pool
      * @return amount1 Token1 received from pool
      */
-    function removeLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external override onlyDiamond returns (uint256 amount0, uint256 amount1) {
+    function removeLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        override
+        onlyDiamond
+        returns (uint256 amount0, uint256 amount1)
+    {
         // Decode pool key
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Calculate full range ticks
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         // Prepare callback data
         CallbackData memory data = CallbackData({
@@ -325,17 +286,18 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return yield0 Fees collected in token0
      * @return yield1 Fees collected in token1
      */
-    function collectYield(
-        bytes calldata params
-    ) external override onlyDiamond returns (uint256 yield0, uint256 yield1) {
+    function collectYield(bytes calldata params)
+        external
+        override
+        onlyDiamond
+        returns (uint256 yield0, uint256 yield1)
+    {
         // Decode pool key
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Calculate full range ticks
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         // Prepare callback data
         CallbackData memory data = CallbackData({
@@ -373,9 +335,7 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @param data Encoded CallbackData struct
      * @return Result data (varies by operation type)
      */
-    function unlockCallback(
-        bytes calldata data
-    ) external override returns (bytes memory) {
+    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
         // Verify caller is PoolManager
         if (msg.sender != address(poolManager)) revert UnauthorizedCallback();
 
@@ -396,13 +356,9 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @notice Handle add liquidity inside unlock callback
      * @dev Calculates liquidity from amounts, adds to pool, settles tokens
      */
-    function _handleAddLiquidity(
-        CallbackData memory data
-    ) internal returns (bytes memory) {
+    function _handleAddLiquidity(CallbackData memory data) internal returns (bytes memory) {
         // Get current pool price
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(
-            data.poolKey.toId()
-        );
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(data.poolKey.toId());
 
         // Calculate liquidity from token amounts
         // LiquidityAmounts.getLiquidityForAmounts determines how much "liquidity"
@@ -417,7 +373,7 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
 
         // Add liquidity to pool
         // modifyLiquidity returns the delta (tokens owed to/from pool)
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
+        (BalanceDelta delta,) = poolManager.modifyLiquidity(
             data.poolKey,
             IPoolManager.ModifyLiquidityParams({
                 tickLower: data.tickLower,
@@ -444,32 +400,18 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
 
         // Take positive deltas (fees from existing position, rare on add)
         if (delta.amount0() > 0) {
-            poolManager.take(
-                data.poolKey.currency0,
-                data.recipient,
-                uint256(uint128(delta.amount0()))
-            );
+            poolManager.take(data.poolKey.currency0, data.recipient, uint256(uint128(delta.amount0())));
         }
         if (delta.amount1() > 0) {
-            poolManager.take(
-                data.poolKey.currency1,
-                data.recipient,
-                uint256(uint128(delta.amount1()))
-            );
+            poolManager.take(data.poolKey.currency1, data.recipient, uint256(uint128(delta.amount1())));
         }
 
         // Return unused tokens to recipient
         if (data.amount0 > amount0Used) {
-            IERC20(Currency.unwrap(data.poolKey.currency0)).safeTransfer(
-                data.recipient,
-                data.amount0 - amount0Used
-            );
+            IERC20(Currency.unwrap(data.poolKey.currency0)).safeTransfer(data.recipient, data.amount0 - amount0Used);
         }
         if (data.amount1 > amount1Used) {
-            IERC20(Currency.unwrap(data.poolKey.currency1)).safeTransfer(
-                data.recipient,
-                data.amount1 - amount1Used
-            );
+            IERC20(Currency.unwrap(data.poolKey.currency1)).safeTransfer(data.recipient, data.amount1 - amount1Used);
         }
 
         return abi.encode(liquidity, amount0Used, amount1Used);
@@ -479,11 +421,9 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @notice Handle remove liquidity inside unlock callback
      * @dev Removes liquidity from pool, takes tokens
      */
-    function _handleRemoveLiquidity(
-        CallbackData memory data
-    ) internal returns (bytes memory) {
+    function _handleRemoveLiquidity(CallbackData memory data) internal returns (bytes memory) {
         // Remove liquidity (negative liquidityDelta)
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
+        (BalanceDelta delta,) = poolManager.modifyLiquidity(
             data.poolKey,
             IPoolManager.ModifyLiquidityParams({
                 tickLower: data.tickLower,
@@ -514,12 +454,10 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @notice Handle yield collection inside unlock callback
      * @dev Uses poke (delta=0) to collect accumulated fees
      */
-    function _handleCollectYield(
-        CallbackData memory data
-    ) internal returns (bytes memory) {
+    function _handleCollectYield(CallbackData memory data) internal returns (bytes memory) {
         // "Poke" the position: modifyLiquidity with 0 delta
         // This triggers fee collection without changing position size
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
+        (BalanceDelta delta,) = poolManager.modifyLiquidity(
             data.poolKey,
             IPoolManager.ModifyLiquidityParams({
                 tickLower: data.tickLower,
@@ -555,10 +493,7 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
         poolManager.sync(currency);
 
         // Transfer tokens to pool manager
-        IERC20(Currency.unwrap(currency)).safeTransfer(
-            address(poolManager),
-            amount
-        );
+        IERC20(Currency.unwrap(currency)).safeTransfer(address(poolManager), amount);
 
         // settle() confirms the payment
         poolManager.settle();
@@ -573,26 +508,17 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @param params Encoded PoolKey
      * @return liquidity Current position liquidity
      */
-    function getPositionLiquidity(
-        bytes calldata params
-    ) external view override returns (uint128 liquidity) {
+    function getPositionLiquidity(bytes calldata params) external view override returns (uint128 liquidity) {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         // Get position info from pool manager
         // Position ID is hash of (owner, tickLower, tickUpper, salt)
-        bytes32 positionKey = keccak256(
-            abi.encodePacked(address(this), tickLower, tickUpper, bytes32(0))
-        );
+        bytes32 positionKey = keccak256(abi.encodePacked(address(this), tickLower, tickUpper, bytes32(0)));
 
-        (liquidity, , ) = poolManager.getPositionInfo(
-            poolKey.toId(),
-            positionKey
-        );
+        (liquidity,,) = poolManager.getPositionInfo(poolKey.toId(), positionKey);
     }
 
     /**
@@ -601,9 +527,7 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return token0 First token address
      * @return token1 Second token address
      */
-    function getPoolTokens(
-        bytes calldata params
-    ) external pure override returns (address token0, address token1) {
+    function getPoolTokens(bytes calldata params) external pure override returns (address token0, address token1) {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
         token0 = Currency.unwrap(poolKey.currency0);
         token1 = Currency.unwrap(poolKey.currency1);
@@ -618,20 +542,20 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return amount0 Estimated token0 to receive
      * @return amount1 Estimated token1 to receive
      */
-    function previewRemoveLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
+    function previewRemoveLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Get current pool price
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
 
         // Calculate full range ticks
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         // Calculate amounts from liquidity using SqrtPriceMath
         uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
@@ -643,34 +567,18 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
 
         if (sqrtPriceX96 <= sqrtPriceA) {
             // All token0: price below range
-            int256 delta0 = SqrtPriceMath.getAmount0Delta(
-                sqrtPriceA,
-                sqrtPriceB,
-                negativeLiquidity
-            );
+            int256 delta0 = SqrtPriceMath.getAmount0Delta(sqrtPriceA, sqrtPriceB, negativeLiquidity);
             amount0 = delta0 > 0 ? uint256(delta0) : uint256(-delta0);
             amount1 = 0;
         } else if (sqrtPriceX96 >= sqrtPriceB) {
             // All token1: price above range
-            int256 delta1 = SqrtPriceMath.getAmount1Delta(
-                sqrtPriceA,
-                sqrtPriceB,
-                negativeLiquidity
-            );
+            int256 delta1 = SqrtPriceMath.getAmount1Delta(sqrtPriceA, sqrtPriceB, negativeLiquidity);
             amount0 = 0;
             amount1 = delta1 > 0 ? uint256(delta1) : uint256(-delta1);
         } else {
             // Both tokens: price in range
-            int256 delta0 = SqrtPriceMath.getAmount0Delta(
-                sqrtPriceX96,
-                sqrtPriceB,
-                negativeLiquidity
-            );
-            int256 delta1 = SqrtPriceMath.getAmount1Delta(
-                sqrtPriceA,
-                sqrtPriceX96,
-                negativeLiquidity
-            );
+            int256 delta0 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, sqrtPriceB, negativeLiquidity);
+            int256 delta1 = SqrtPriceMath.getAmount1Delta(sqrtPriceA, sqrtPriceX96, negativeLiquidity);
             amount0 = delta0 > 0 ? uint256(delta0) : uint256(-delta0);
             amount1 = delta1 > 0 ? uint256(delta1) : uint256(-delta1);
         }
@@ -685,9 +593,7 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @notice Check if pool is supported
      * @dev Validates PoolKey and checks if pool is initialized
      */
-    function supportsPool(
-        bytes calldata params
-    ) external view override returns (bool) {
+    function supportsPool(bytes calldata params) external view override returns (bool) {
         try this.decodeAndCheckPool(params) returns (bool result) {
             return result;
         } catch {
@@ -696,13 +602,11 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     }
 
     /// @notice Helper to decode and check pool (used by supportsPool)
-    function decodeAndCheckPool(
-        bytes calldata params
-    ) external view returns (bool) {
+    function decodeAndCheckPool(bytes calldata params) external view returns (bool) {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Check if pool is initialized by getting slot0
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
 
         // sqrtPriceX96 = 0 means pool is not initialized
         return sqrtPriceX96 != 0;
@@ -722,88 +626,53 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @dev Calculates expected liquidity and actual token usage
      * @param params Encoded (PoolKey, amount0, amount1)
      */
-    function previewAddLiquidity(
-        bytes calldata params
-    )
+    function previewAddLiquidity(bytes calldata params)
         external
         view
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        (PoolKey memory poolKey, uint256 amount0, uint256 amount1) = abi.decode(
-            params,
-            (PoolKey, uint256, uint256)
-        );
+        (PoolKey memory poolKey, uint256 amount0, uint256 amount1) = abi.decode(params, (PoolKey, uint256, uint256));
 
         // Get current pool price
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
 
         // Calculate full range ticks
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
         uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
         // Calculate liquidity from amounts
-        liquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96,
-            sqrtPriceA,
-            sqrtPriceB,
-            amount0,
-            amount1
-        );
+        liquidity = LiquidityAmounts.getLiquidityForAmounts(sqrtPriceX96, sqrtPriceA, sqrtPriceB, amount0, amount1);
 
         // Calculate actual amounts that will be used using SqrtPriceMath
         // (LiquidityAmounts.getAmountsForLiquidity is not available in v4-periphery)
-        (amount0Used, amount1Used) = _getAmountsForLiquidity(
-            sqrtPriceX96,
-            sqrtPriceA,
-            sqrtPriceB,
-            liquidity
-        );
+        (amount0Used, amount1Used) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity);
     }
 
     /**
      * @notice Calculate token amounts for given liquidity
      * @dev Helper function since LiquidityAmounts.getAmountsForLiquidity is not available
      */
-    function _getAmountsForLiquidity(
-        uint160 sqrtPriceX96,
-        uint160 sqrtPriceA,
-        uint160 sqrtPriceB,
-        uint128 liquidity
-    ) internal pure returns (uint256 amount0, uint256 amount1) {
+    function _getAmountsForLiquidity(uint160 sqrtPriceX96, uint160 sqrtPriceA, uint160 sqrtPriceB, uint128 liquidity)
+        internal
+        pure
+        returns (uint256 amount0, uint256 amount1)
+    {
         if (sqrtPriceX96 <= sqrtPriceA) {
             // All token0: price below range
-            int256 delta0 = SqrtPriceMath.getAmount0Delta(
-                sqrtPriceA,
-                sqrtPriceB,
-                int128(liquidity)
-            );
+            int256 delta0 = SqrtPriceMath.getAmount0Delta(sqrtPriceA, sqrtPriceB, int128(liquidity));
             amount0 = delta0 > 0 ? uint256(delta0) : uint256(-delta0);
         } else if (sqrtPriceX96 >= sqrtPriceB) {
             // All token1: price above range
-            int256 delta1 = SqrtPriceMath.getAmount1Delta(
-                sqrtPriceA,
-                sqrtPriceB,
-                int128(liquidity)
-            );
+            int256 delta1 = SqrtPriceMath.getAmount1Delta(sqrtPriceA, sqrtPriceB, int128(liquidity));
             amount1 = delta1 > 0 ? uint256(delta1) : uint256(-delta1);
         } else {
             // Both tokens: price in range
-            int256 delta0 = SqrtPriceMath.getAmount0Delta(
-                sqrtPriceX96,
-                sqrtPriceB,
-                int128(liquidity)
-            );
-            int256 delta1 = SqrtPriceMath.getAmount1Delta(
-                sqrtPriceA,
-                sqrtPriceX96,
-                int128(liquidity)
-            );
+            int256 delta0 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, sqrtPriceB, int128(liquidity));
+            int256 delta1 = SqrtPriceMath.getAmount1Delta(sqrtPriceA, sqrtPriceX96, int128(liquidity));
             amount0 = delta0 > 0 ? uint256(delta0) : uint256(-delta0);
             amount1 = delta1 > 0 ? uint256(delta1) : uint256(-delta1);
         }
@@ -813,76 +682,58 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @notice Calculate optimal amount1 for given amount0
      * @dev Uses current pool price to calculate matching amount
      */
-    function calculateOptimalAmount1(
-        uint256 amount0,
-        bytes calldata params
-    ) external view override returns (uint256 amount1) {
+    function calculateOptimalAmount1(uint256 amount0, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount1)
+    {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Get current pool price
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
 
         // Calculate full range ticks
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
         uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
         // Get liquidity for amount0 only
-        uint128 liquidity0 = LiquidityAmounts.getLiquidityForAmount0(
-            sqrtPriceX96,
-            sqrtPriceB,
-            amount0
-        );
+        uint128 liquidity0 = LiquidityAmounts.getLiquidityForAmount0(sqrtPriceX96, sqrtPriceB, amount0);
 
         // Calculate corresponding amount1
-        (, amount1) = _getAmountsForLiquidity(
-            sqrtPriceX96,
-            sqrtPriceA,
-            sqrtPriceB,
-            liquidity0
-        );
+        (, amount1) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity0);
     }
 
     /**
      * @notice Calculate optimal amount0 for given amount1
      * @dev Uses current pool price to calculate matching amount
      */
-    function calculateOptimalAmount0(
-        uint256 amount1,
-        bytes calldata params
-    ) external view override returns (uint256 amount0) {
+    function calculateOptimalAmount0(uint256 amount1, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0)
+    {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Get current pool price
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
 
         // Calculate full range ticks
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
         uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
         // Get liquidity for amount1 only
-        uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmount1(
-            sqrtPriceA,
-            sqrtPriceX96,
-            amount1
-        );
+        uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmount1(sqrtPriceA, sqrtPriceX96, amount1);
 
         // Calculate corresponding amount0
-        (amount0, ) = _getAmountsForLiquidity(
-            sqrtPriceX96,
-            sqrtPriceA,
-            sqrtPriceB,
-            liquidity1
-        );
+        (amount0,) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity1);
     }
 
     /**
@@ -890,20 +741,16 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return sqrtPriceX96 Current sqrt price in Q96 format
      * @return tick Current tick
      */
-    function getPoolPrice(
-        bytes calldata params
-    ) external view override returns (uint160 sqrtPriceX96, int24 tick) {
+    function getPoolPrice(bytes calldata params) external view override returns (uint160 sqrtPriceX96, int24 tick) {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
-        (sqrtPriceX96, tick, , ) = poolManager.getSlot0(poolKey.toId());
+        (sqrtPriceX96, tick,,) = poolManager.getSlot0(poolKey.toId());
     }
 
     /**
      * @notice Get pool fee tier
      * @return fee Fee in hundredths of a bip
      */
-    function getPoolFee(
-        bytes calldata params
-    ) external view override returns (uint24 fee) {
+    function getPoolFee(bytes calldata params) external view override returns (uint24 fee) {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
         fee = poolKey.fee;
     }
@@ -920,41 +767,27 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return amount0 Value of our position in token0
      * @return amount1 Value of our position in token1
      */
-    function getPositionValue(
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
+    function getPositionValue(bytes calldata params) external view override returns (uint256 amount0, uint256 amount1) {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Get our position's liquidity
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
-        bytes32 positionKey = keccak256(
-            abi.encodePacked(address(this), tickLower, tickUpper, bytes32(0))
-        );
+        bytes32 positionKey = keccak256(abi.encodePacked(address(this), tickLower, tickUpper, bytes32(0)));
 
-        (uint128 liquidity, , ) = poolManager.getPositionInfo(
-            poolKey.toId(),
-            positionKey
-        );
+        (uint128 liquidity,,) = poolManager.getPositionInfo(poolKey.toId(), positionKey);
 
         if (liquidity == 0) return (0, 0);
 
         // Get current pool price
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
 
         uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
         uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
         // Calculate token amounts for our liquidity
-        (amount0, amount1) = _getAmountsForLiquidity(
-            sqrtPriceX96,
-            sqrtPriceA,
-            sqrtPriceB,
-            liquidity
-        );
+        (amount0, amount1) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity);
     }
 
     /**
@@ -969,32 +802,28 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * @return amount0 Total token0 in the pool
      * @return amount1 Total token1 in the pool
      */
-    function getPoolTotalValue(
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
+    function getPoolTotalValue(bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
 
         // Get current pool price and total liquidity
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolKey.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
         uint128 totalLiquidity = poolManager.getLiquidity(poolKey.toId());
 
         if (totalLiquidity == 0) return (0, 0);
 
         // Calculate full range ticks
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) *
-            poolKey.tickSpacing;
+        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
         uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
         uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
         // Calculate token amounts for total liquidity
-        (amount0, amount1) = _getAmountsForLiquidity(
-            sqrtPriceX96,
-            sqrtPriceA,
-            sqrtPriceB,
-            totalLiquidity
-        );
+        (amount0, amount1) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, totalLiquidity);
     }
 }

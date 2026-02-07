@@ -67,12 +67,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 reserveOut = 1000e18;
         uint256 feeBps = 30; // 0.3%
 
-        (uint256 amountOut, uint256 feeAmount) = wrapper.getAmountOut(
-            amountIn,
-            reserveIn,
-            reserveOut,
-            feeBps
-        );
+        (uint256 amountOut, uint256 feeAmount) = wrapper.getAmountOut(amountIn, reserveIn, reserveOut, feeBps);
 
         // Fee = 100 * 30 / 10000 = 0.3
         assertEq(feeAmount, 3e17); // 0.3e18
@@ -99,12 +94,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 reserveOut = 1000e18;
         uint256 feeBps = 30;
 
-        uint256 amountIn = wrapper.getAmountIn(
-            amountOut,
-            reserveIn,
-            reserveOut,
-            feeBps
-        );
+        uint256 amountIn = wrapper.getAmountIn(amountOut, reserveIn, reserveOut, feeBps);
 
         // amountIn should be > amountOut due to price impact and fees
         assertGt(amountIn, 100e18);
@@ -119,8 +109,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 ptAmount = 1000e18;
         uint256 discountBps = 500; // 5% discount
 
-        (uint256 lpTokens, uint256 virtualQuote) = wrapper
-            .calculateInitialLpTokens(ptAmount, discountBps);
+        (uint256 lpTokens, uint256 virtualQuote) = wrapper.calculateInitialLpTokens(ptAmount, discountBps);
 
         // virtualQuote = 1000 * 0.95 = 950
         assertEq(virtualQuote, 950e18);
@@ -135,11 +124,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 ptReserve = 1000e18;
         uint256 totalLpShares = 950e18;
 
-        uint256 lpTokens = wrapper.calculateSubsequentLpTokens(
-            ptAmount,
-            ptReserve,
-            totalLpShares
-        );
+        uint256 lpTokens = wrapper.calculateSubsequentLpTokens(ptAmount, ptReserve, totalLpShares);
 
         // 500/1000 * 950 = 475
         assertEq(lpTokens, 475e18);
@@ -150,11 +135,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 ptReserve = 1000e18;
         uint256 totalLpShares = 500e18;
 
-        uint256 ptAmount = wrapper.calculateWithdrawAmount(
-            lpTokens,
-            ptReserve,
-            totalLpShares
-        );
+        uint256 ptAmount = wrapper.calculateWithdrawAmount(lpTokens, ptReserve, totalLpShares);
 
         // 100/500 * 1000 = 200
         assertEq(ptAmount, 200e18);
@@ -168,10 +149,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 ptReserve = 1000e18;
         uint256 virtualQuoteReserve = 950e18; // 5% discount
 
-        uint256 priceBps = wrapper.getPtPriceBps(
-            ptReserve,
-            virtualQuoteReserve
-        );
+        uint256 priceBps = wrapper.getPtPriceBps(ptReserve, virtualQuoteReserve);
 
         // price = 950/1000 = 0.95 = 9500 bps
         assertEq(priceBps, 9500);
@@ -181,10 +159,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 ptReserve = 1000e18;
         uint256 virtualQuoteReserve = 950e18;
 
-        uint256 discountBps = wrapper.getDiscountBps(
-            ptReserve,
-            virtualQuoteReserve
-        );
+        uint256 discountBps = wrapper.getDiscountBps(ptReserve, virtualQuoteReserve);
 
         // discount = 10000 - 9500 = 500 bps (5%)
         assertEq(discountBps, 500);
@@ -194,10 +169,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 ptReserve = 1000e18;
         uint256 virtualQuoteReserve = 1000e18; // At par
 
-        uint256 discountBps = wrapper.getDiscountBps(
-            ptReserve,
-            virtualQuoteReserve
-        );
+        uint256 discountBps = wrapper.getDiscountBps(ptReserve, virtualQuoteReserve);
 
         assertEq(discountBps, 0);
     }
@@ -261,7 +233,7 @@ contract LibYieldForgeMarketTest is Test {
         uint256 factor = wrapper.getTimeDecayFactor(createdAt, maturityDate);
 
         // Should be approximately 0.56e18 (56%)
-        assertGt(factor, 0.50e18);
+        assertGt(factor, 0.5e18);
         assertLt(factor, 0.62e18);
     }
 
@@ -271,12 +243,8 @@ contract LibYieldForgeMarketTest is Test {
         uint256 createdAt = block.timestamp;
         uint256 maturityDate = block.timestamp + 90 days;
 
-        uint256 effectiveQuote = wrapper.getEffectiveVirtualQuoteReserve(
-            virtualQuote,
-            ptReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectiveQuote =
+            wrapper.getEffectiveVirtualQuoteReserve(virtualQuote, ptReserve, createdAt, maturityDate);
 
         assertEq(effectiveQuote, virtualQuote); // No change at creation
     }
@@ -287,12 +255,8 @@ contract LibYieldForgeMarketTest is Test {
         uint256 createdAt = block.timestamp - 90 days;
         uint256 maturityDate = block.timestamp; // At maturity
 
-        uint256 effectiveQuote = wrapper.getEffectiveVirtualQuoteReserve(
-            virtualQuote,
-            ptReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectiveQuote =
+            wrapper.getEffectiveVirtualQuoteReserve(virtualQuote, ptReserve, createdAt, maturityDate);
 
         // At maturity, effective quote should equal PT reserve (parity)
         assertEq(effectiveQuote, ptReserve);
@@ -305,12 +269,8 @@ contract LibYieldForgeMarketTest is Test {
         uint256 createdAt = block.timestamp - 45 days;
         uint256 maturityDate = block.timestamp + 45 days;
 
-        uint256 effectiveQuote = wrapper.getEffectiveVirtualQuoteReserve(
-            virtualQuote,
-            ptReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectiveQuote =
+            wrapper.getEffectiveVirtualQuoteReserve(virtualQuote, ptReserve, createdAt, maturityDate);
 
         // Gap = 100e18, decay = 0.25, drift = 25e18
         // Expected effective quote ≈ 925e18
@@ -331,38 +291,20 @@ contract LibYieldForgeMarketTest is Test {
         uint256 maturityDate = baseTime + 90 days;
 
         // At creation: should behave like normal AMM
-        (uint256 ptOutCreation, ) = wrapper.getAmountOutQuoteToPt(
-            amountIn,
-            virtualQuote,
-            ptReserve,
-            feeBps,
-            createdAt,
-            maturityDate
-        );
+        (uint256 ptOutCreation,) =
+            wrapper.getAmountOutQuoteToPt(amountIn, virtualQuote, ptReserve, feeBps, createdAt, maturityDate);
 
         // At 50% elapsed: different price
         vm.warp(baseTime + 45 days);
 
-        (uint256 ptOutMidway, ) = wrapper.getAmountOutQuoteToPt(
-            amountIn,
-            virtualQuote,
-            ptReserve,
-            feeBps,
-            createdAt,
-            maturityDate
-        );
+        (uint256 ptOutMidway,) =
+            wrapper.getAmountOutQuoteToPt(amountIn, virtualQuote, ptReserve, feeBps, createdAt, maturityDate);
 
         // At maturity: parity pricing
         vm.warp(maturityDate);
 
-        (uint256 ptOutMaturity, ) = wrapper.getAmountOutQuoteToPt(
-            amountIn,
-            virtualQuote,
-            ptReserve,
-            feeBps,
-            createdAt,
-            maturityDate
-        );
+        (uint256 ptOutMaturity,) =
+            wrapper.getAmountOutQuoteToPt(amountIn, virtualQuote, ptReserve, feeBps, createdAt, maturityDate);
 
         // As maturity approaches, PT is worth MORE so we get LESS per quote
         // At creation = maximum PT out, at maturity = minimum PT out
@@ -379,22 +321,12 @@ contract LibYieldForgeMarketTest is Test {
         uint256 maturityDate = block.timestamp + 90 days;
 
         // At creation: 9000 bps (90%)
-        uint256 priceAtCreation = wrapper.getEffectivePtPriceBps(
-            ptReserve,
-            virtualQuote,
-            createdAt,
-            maturityDate
-        );
+        uint256 priceAtCreation = wrapper.getEffectivePtPriceBps(ptReserve, virtualQuote, createdAt, maturityDate);
         assertEq(priceAtCreation, 9000);
 
         // At maturity: 10000 bps (100% = parity)
         vm.warp(maturityDate);
-        uint256 priceAtMaturity = wrapper.getEffectivePtPriceBps(
-            ptReserve,
-            virtualQuote,
-            createdAt,
-            maturityDate
-        );
+        uint256 priceAtMaturity = wrapper.getEffectivePtPriceBps(ptReserve, virtualQuote, createdAt, maturityDate);
         assertEq(priceAtMaturity, 10000);
     }
 
@@ -407,25 +339,13 @@ contract LibYieldForgeMarketTest is Test {
         uint256 maturityDate = block.timestamp + 90 days;
 
         // At creation
-        (uint256 quoteOutCreation, ) = wrapper.getAmountOutPtToQuote(
-            ptIn,
-            ptReserve,
-            virtualQuote,
-            feeBps,
-            createdAt,
-            maturityDate
-        );
+        (uint256 quoteOutCreation,) =
+            wrapper.getAmountOutPtToQuote(ptIn, ptReserve, virtualQuote, feeBps, createdAt, maturityDate);
 
         // At maturity
         vm.warp(maturityDate);
-        (uint256 quoteOutMaturity, ) = wrapper.getAmountOutPtToQuote(
-            ptIn,
-            ptReserve,
-            virtualQuote,
-            feeBps,
-            createdAt,
-            maturityDate
-        );
+        (uint256 quoteOutMaturity,) =
+            wrapper.getAmountOutPtToQuote(ptIn, ptReserve, virtualQuote, feeBps, createdAt, maturityDate);
 
         // Selling PT near maturity should give MORE quote
         assertGt(quoteOutMaturity, quoteOutCreation);
@@ -440,96 +360,56 @@ contract LibYieldForgeMarketTest is Test {
  * @notice Wrapper to expose internal library functions for testing
  */
 contract LibYieldForgeMarketWrapper {
-    function getSwapFeeBps(
-        uint256 maturityDate
-    ) external view returns (uint256) {
+    function getSwapFeeBps(uint256 maturityDate) external view returns (uint256) {
         return LibYieldForgeMarket.getSwapFeeBps(maturityDate);
     }
 
-    function splitFee(
-        uint256 totalFee
-    ) external pure returns (uint256, uint256) {
+    function splitFee(uint256 totalFee) external pure returns (uint256, uint256) {
         return LibYieldForgeMarket.splitFee(totalFee);
     }
 
-    function getAmountOut(
-        uint256 amountIn,
-        uint256 reserveIn,
-        uint256 reserveOut,
-        uint256 feeBps
-    ) external pure returns (uint256, uint256) {
-        return
-            LibYieldForgeMarket.getAmountOut(
-                amountIn,
-                reserveIn,
-                reserveOut,
-                feeBps
-            );
+    function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
+        external
+        pure
+        returns (uint256, uint256)
+    {
+        return LibYieldForgeMarket.getAmountOut(amountIn, reserveIn, reserveOut, feeBps);
     }
 
-    function getAmountIn(
-        uint256 amountOut,
-        uint256 reserveIn,
-        uint256 reserveOut,
-        uint256 feeBps
-    ) external pure returns (uint256) {
-        return
-            LibYieldForgeMarket.getAmountIn(
-                amountOut,
-                reserveIn,
-                reserveOut,
-                feeBps
-            );
+    function getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
+        external
+        pure
+        returns (uint256)
+    {
+        return LibYieldForgeMarket.getAmountIn(amountOut, reserveIn, reserveOut, feeBps);
     }
 
-    function calculateInitialLpTokens(
-        uint256 ptAmount,
-        uint256 discountBps
-    ) external pure returns (uint256, uint256) {
-        return
-            LibYieldForgeMarket.calculateInitialLpTokens(ptAmount, discountBps);
+    function calculateInitialLpTokens(uint256 ptAmount, uint256 discountBps) external pure returns (uint256, uint256) {
+        return LibYieldForgeMarket.calculateInitialLpTokens(ptAmount, discountBps);
     }
 
-    function calculateSubsequentLpTokens(
-        uint256 ptAmount,
-        uint256 ptReserve,
-        uint256 totalLpShares
-    ) external pure returns (uint256) {
-        return
-            LibYieldForgeMarket.calculateSubsequentLpTokens(
-                ptAmount,
-                ptReserve,
-                totalLpShares
-            );
+    function calculateSubsequentLpTokens(uint256 ptAmount, uint256 ptReserve, uint256 totalLpShares)
+        external
+        pure
+        returns (uint256)
+    {
+        return LibYieldForgeMarket.calculateSubsequentLpTokens(ptAmount, ptReserve, totalLpShares);
     }
 
-    function calculateWithdrawAmount(
-        uint256 lpTokens,
-        uint256 ptReserve,
-        uint256 totalLpShares
-    ) external pure returns (uint256) {
-        return
-            LibYieldForgeMarket.calculateWithdrawAmount(
-                lpTokens,
-                ptReserve,
-                totalLpShares
-            );
+    function calculateWithdrawAmount(uint256 lpTokens, uint256 ptReserve, uint256 totalLpShares)
+        external
+        pure
+        returns (uint256)
+    {
+        return LibYieldForgeMarket.calculateWithdrawAmount(lpTokens, ptReserve, totalLpShares);
     }
 
-    function getPtPriceBps(
-        uint256 ptReserve,
-        uint256 virtualQuoteReserve
-    ) external pure returns (uint256) {
-        return
-            LibYieldForgeMarket.getPtPriceBps(ptReserve, virtualQuoteReserve);
+    function getPtPriceBps(uint256 ptReserve, uint256 virtualQuoteReserve) external pure returns (uint256) {
+        return LibYieldForgeMarket.getPtPriceBps(ptReserve, virtualQuoteReserve);
     }
 
-    function getDiscountBps(
-        uint256 ptReserve,
-        uint256 virtualQuoteReserve
-    ) external pure returns (uint256) {
-        return
-            LibYieldForgeMarket.getDiscountBps(ptReserve, virtualQuoteReserve);
+    function getDiscountBps(uint256 ptReserve, uint256 virtualQuoteReserve) external pure returns (uint256) {
+        return LibYieldForgeMarket.getDiscountBps(ptReserve, virtualQuoteReserve);
     }
 
     function sqrt(uint256 x) external pure returns (uint256) {
@@ -540,10 +420,7 @@ contract LibYieldForgeMarketWrapper {
     //                TIME DECAY WRAPPER FUNCTIONS
     // ================================================================
 
-    function getTimeDecayFactor(
-        uint256 createdAt,
-        uint256 maturityDate
-    ) external view returns (uint256) {
+    function getTimeDecayFactor(uint256 createdAt, uint256 maturityDate) external view returns (uint256) {
         return LibYieldForgeMarket.getTimeDecayFactor(createdAt, maturityDate);
     }
 
@@ -553,13 +430,9 @@ contract LibYieldForgeMarketWrapper {
         uint256 createdAt,
         uint256 maturityDate
     ) external view returns (uint256) {
-        return
-            LibYieldForgeMarket.getEffectiveVirtualQuoteReserve(
-                virtualQuoteReserve,
-                ptReserve,
-                createdAt,
-                maturityDate
-            );
+        return LibYieldForgeMarket.getEffectiveVirtualQuoteReserve(
+            virtualQuoteReserve, ptReserve, createdAt, maturityDate
+        );
     }
 
     function getEffectivePtReserve(
@@ -568,13 +441,7 @@ contract LibYieldForgeMarketWrapper {
         uint256 createdAt,
         uint256 maturityDate
     ) external view returns (uint256) {
-        return
-            LibYieldForgeMarket.getEffectivePtReserve(
-                ptReserve,
-                virtualQuoteReserve,
-                createdAt,
-                maturityDate
-            );
+        return LibYieldForgeMarket.getEffectivePtReserve(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
     }
 
     function getAmountOutQuoteToPt(
@@ -585,15 +452,9 @@ contract LibYieldForgeMarketWrapper {
         uint256 createdAt,
         uint256 maturityDate
     ) external view returns (uint256, uint256) {
-        return
-            LibYieldForgeMarket.getAmountOutQuoteToPt(
-                amountIn,
-                virtualQuoteReserve,
-                ptReserve,
-                feeBps,
-                createdAt,
-                maturityDate
-            );
+        return LibYieldForgeMarket.getAmountOutQuoteToPt(
+            amountIn, virtualQuoteReserve, ptReserve, feeBps, createdAt, maturityDate
+        );
     }
 
     function getAmountOutPtToQuote(
@@ -604,15 +465,9 @@ contract LibYieldForgeMarketWrapper {
         uint256 createdAt,
         uint256 maturityDate
     ) external view returns (uint256, uint256) {
-        return
-            LibYieldForgeMarket.getAmountOutPtToQuote(
-                amountIn,
-                ptReserve,
-                virtualQuoteReserve,
-                feeBps,
-                createdAt,
-                maturityDate
-            );
+        return LibYieldForgeMarket.getAmountOutPtToQuote(
+            amountIn, ptReserve, virtualQuoteReserve, feeBps, createdAt, maturityDate
+        );
     }
 
     function getEffectivePtPriceBps(
@@ -621,12 +476,6 @@ contract LibYieldForgeMarketWrapper {
         uint256 createdAt,
         uint256 maturityDate
     ) external view returns (uint256) {
-        return
-            LibYieldForgeMarket.getEffectivePtPriceBps(
-                ptReserve,
-                virtualQuoteReserve,
-                createdAt,
-                maturityDate
-            );
+        return LibYieldForgeMarket.getEffectivePtPriceBps(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
     }
 }

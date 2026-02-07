@@ -53,44 +53,24 @@ contract ApplyConfiguration is Script {
         // Try env first, then load from deployments
         address diamond = vm.envOr("DIAMOND", address(0));
         if (diamond == address(0)) {
-            string memory deploymentsJsonPath = string.concat(
-                vm.projectRoot(),
-                "/deployments/",
-                chainId,
-                ".json"
-            );
+            string memory deploymentsJsonPath = string.concat(vm.projectRoot(), "/deployments/", chainId, ".json");
             string memory deploymentsJson;
-            try vm.readFile(deploymentsJsonPath) returns (
-                string memory content
-            ) {
+            try vm.readFile(deploymentsJsonPath) returns (string memory content) {
                 deploymentsJson = content;
                 diamond = vm.parseJsonAddress(deploymentsJson, ".Diamond");
             } catch {
-                revert(
-                    string.concat(
-                        "No DIAMOND env and no deployments/",
-                        chainId,
-                        ".json found"
-                    )
-                );
+                revert(string.concat("No DIAMOND env and no deployments/", chainId, ".json found"));
             }
         }
 
         // ============ Load Config File ============
-        string memory configPath = string.concat(
-            vm.projectRoot(),
-            "/config/",
-            chainId,
-            ".json"
-        );
+        string memory configPath = string.concat(vm.projectRoot(), "/config/", chainId, ".json");
 
         string memory config;
         try vm.readFile(configPath) returns (string memory content) {
             config = content;
         } catch {
-            revert(
-                string.concat("Config not found: config/", chainId, ".json")
-            );
+            revert(string.concat("Config not found: config/", chainId, ".json"));
         }
         string memory networkName = vm.parseJsonString(config, ".name");
 
@@ -104,12 +84,7 @@ contract ApplyConfiguration is Script {
         PoolRegistryFacet registry = PoolRegistryFacet(diamond);
 
         // ============ Load Deployed Adapters ============
-        string memory deploymentsPath = string.concat(
-            vm.projectRoot(),
-            "/deployments/adapters-",
-            chainId,
-            ".json"
-        );
+        string memory deploymentsPath = string.concat(vm.projectRoot(), "/deployments/adapters-", chainId, ".json");
 
         string memory deployments = "{}";
         try vm.readFile(deploymentsPath) returns (string memory content) {
@@ -126,23 +101,14 @@ contract ApplyConfiguration is Script {
 
         // Read adapter names from config dynamically
         string[] memory adapterNames;
-        try vm.parseJsonKeys(config, ".adapters") returns (
-            string[] memory keys
-        ) {
+        try vm.parseJsonKeys(config, ".adapters") returns (string[] memory keys) {
             adapterNames = keys;
         } catch {
             console.log("No adapters configured");
             adapterNames = new string[](0);
         }
         for (uint256 i = 0; i < adapterNames.length; i++) {
-            _processAdapter(
-                config,
-                deployments,
-                adapterNames[i],
-                diamond,
-                registry,
-                dryRun
-            );
+            _processAdapter(config, deployments, adapterNames[i], diamond, registry, dryRun);
         }
 
         // ============ Process Quote Tokens (Dynamic) ============
@@ -177,9 +143,7 @@ contract ApplyConfiguration is Script {
 
         // Check if already deployed
         address deployedAdapter;
-        try
-            vm.parseJsonAddress(deployments, string.concat(".", adapterName))
-        returns (address addr) {
+        try vm.parseJsonAddress(deployments, string.concat(".", adapterName)) returns (address addr) {
             deployedAdapter = addr;
         } catch {
             // Not deployed - deploy it
@@ -187,12 +151,7 @@ contract ApplyConfiguration is Script {
             actionsPerformed++;
 
             if (!dryRun) {
-                deployedAdapter = _deployAdapter(
-                    config,
-                    basePath,
-                    adapterName,
-                    diamond
-                );
+                deployedAdapter = _deployAdapter(config, basePath, adapterName, diamond);
                 _saveDeployment(adapterName, deployedAdapter);
             }
         }
@@ -213,68 +172,42 @@ contract ApplyConfiguration is Script {
         }
     }
 
-    function _deployAdapter(
-        string memory config,
-        string memory basePath,
-        string memory adapterName,
-        address diamond
-    ) internal returns (address) {
+    function _deployAdapter(string memory config, string memory basePath, string memory adapterName, address diamond)
+        internal
+        returns (address)
+    {
         bytes32 nameHash = keccak256(bytes(adapterName));
 
         if (nameHash == keccak256("UniswapV4Adapter")) {
-            address poolManager = vm.parseJsonAddress(
-                config,
-                string.concat(basePath, ".poolManager")
-            );
-            address adapter = address(
-                new UniswapV4Adapter(poolManager, diamond)
-            );
+            address poolManager = vm.parseJsonAddress(config, string.concat(basePath, ".poolManager"));
+            address adapter = address(new UniswapV4Adapter(poolManager, diamond));
             console.log("  Deployed at:", adapter);
             return adapter;
         }
 
         if (nameHash == keccak256("UniswapV3Adapter")) {
-            address positionManager = vm.parseJsonAddress(
-                config,
-                string.concat(basePath, ".positionManager")
-            );
-            address factory = vm.parseJsonAddress(
-                config,
-                string.concat(basePath, ".factory")
-            );
-            address adapter = address(
-                new UniswapV3Adapter(positionManager, factory, diamond)
-            );
+            address positionManager = vm.parseJsonAddress(config, string.concat(basePath, ".positionManager"));
+            address factory = vm.parseJsonAddress(config, string.concat(basePath, ".factory"));
+            address adapter = address(new UniswapV3Adapter(positionManager, factory, diamond));
             console.log("  Deployed at:", adapter);
             return adapter;
         }
 
         if (nameHash == keccak256("CurveAdapter")) {
-            address crvToken = vm.parseJsonAddress(
-                config,
-                string.concat(basePath, ".crvToken")
-            );
+            address crvToken = vm.parseJsonAddress(config, string.concat(basePath, ".crvToken"));
             address adapter = address(new CurveAdapter(diamond, crvToken));
             console.log("  Deployed at:", adapter);
             return adapter;
         }
 
         // Unknown adapter - skip with warning
-        console.log(
-            string.concat("  [WARN] Unknown adapter type: ", adapterName)
-        );
+        console.log(string.concat("  [WARN] Unknown adapter type: ", adapterName));
         return address(0);
     }
 
-    function _processQuoteTokens(
-        string memory config,
-        PoolRegistryFacet registry,
-        bool dryRun
-    ) internal {
+    function _processQuoteTokens(string memory config, PoolRegistryFacet registry, bool dryRun) internal {
         string[] memory tokenNames;
-        try vm.parseJsonKeys(config, ".quoteTokens") returns (
-            string[] memory keys
-        ) {
+        try vm.parseJsonKeys(config, ".quoteTokens") returns (string[] memory keys) {
             tokenNames = keys;
         } catch {
             console.log("No quote tokens configured");
@@ -282,10 +215,7 @@ contract ApplyConfiguration is Script {
         }
         for (uint256 i = 0; i < tokenNames.length; i++) {
             string memory tokenName = tokenNames[i];
-            address tokenAddress = vm.parseJsonAddress(
-                config,
-                string.concat(".quoteTokens.", tokenName)
-            );
+            address tokenAddress = vm.parseJsonAddress(config, string.concat(".quoteTokens.", tokenName));
 
             if (!registry.isQuoteTokenApproved(tokenAddress)) {
                 console.log(string.concat("[APPROVE] ", tokenName));
@@ -300,24 +230,12 @@ contract ApplyConfiguration is Script {
         }
     }
 
-    function _saveDeployment(
-        string memory adapterName,
-        address adapter
-    ) internal {
+    function _saveDeployment(string memory adapterName, address adapter) internal {
         string memory chainId = vm.toString(block.chainid);
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/deployments/adapters-",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/deployments/adapters-", chainId, ".json");
 
         string memory json = "adapters";
-        string memory finalJson = vm.serializeAddress(
-            json,
-            adapterName,
-            adapter
-        );
+        string memory finalJson = vm.serializeAddress(json, adapterName, adapter);
         vm.writeJson(finalJson, path);
     }
 }

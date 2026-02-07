@@ -21,10 +21,7 @@ contract PauseFacet {
 
     event Paused(address account);
     event Unpaused(address account);
-    event PauseGuardianSet(
-        address indexed previousGuardian,
-        address indexed newGuardian
-    );
+    event PauseGuardianSet(address indexed previousGuardian, address indexed newGuardian);
 
     // ============ Modifiers ============
 

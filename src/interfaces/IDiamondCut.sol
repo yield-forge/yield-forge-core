@@ -41,11 +41,7 @@ interface IDiamondCut {
     /// @param _diamondCut Array of FacetCut describing changes
     /// @param _init Address of contract for initialization (address(0) if not needed)
     /// @param _calldata Data for calling _init via delegatecall
-    function diamondCut(
-        FacetCut[] calldata _diamondCut,
-        address _init,
-        bytes calldata _calldata
-    ) external;
+    function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external;
 
     /// @notice Emitted on any facet changes
     event DiamondCut(FacetCut[] _diamondCut, address _init, bytes _calldata);

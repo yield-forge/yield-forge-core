@@ -61,11 +61,7 @@ contract TokenTest is Test {
         yieldAccumulatorFacet = new YieldAccumulatorFacet();
 
         // Deploy mock adapter
-        mockAdapter = new MockTokenAdapter(
-            address(token0),
-            address(token1),
-            address(diamond)
-        );
+        mockAdapter = new MockTokenAdapter(address(token0), address(token1), address(diamond));
 
         // Add facets to Diamond
         _addFacets();
@@ -141,18 +137,12 @@ contract TokenTest is Test {
         PoolRegistryFacet(address(diamond)).initialize(treasury);
 
         // Approve adapter and quote token
-        PoolRegistryFacet(address(diamond)).approveAdapter(
-            address(mockAdapter)
-        );
+        PoolRegistryFacet(address(diamond)).approveAdapter(address(mockAdapter));
         PoolRegistryFacet(address(diamond)).approveQuoteToken(address(token0));
 
         // Register pool
         bytes memory poolParams = abi.encode(address(0xB001));
-        poolId = PoolRegistryFacet(address(diamond)).registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(token0)
-        );
+        poolId = PoolRegistryFacet(address(diamond)).registerPool(address(mockAdapter), poolParams, address(token0));
 
         // Mint tokens to user and add liquidity to create cycle
         token0.mint(user, 10000e18);
@@ -165,9 +155,7 @@ contract TokenTest is Test {
         vm.stopPrank();
 
         // Get deployed PT/YT tokens from cycle info
-        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(
-            address(diamond)
-        ).getCycleInfo(poolId, 1);
+        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, 1);
         ptToken = PrincipalToken(cycleInfo.ptToken);
         ytToken = YieldToken(cycleInfo.ytToken);
     }
@@ -328,9 +316,7 @@ contract MockTokenAdapter is ILiquidityAdapter {
         diamond = _diamond;
     }
 
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
@@ -353,41 +339,27 @@ contract MockTokenAdapter is ILiquidityAdapter {
         return (liquidity, amount0Used, amount1Used);
     }
 
-    function removeLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function removeLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function collectYield(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function collectYield(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTokens(
-        bytes calldata
-    ) external view override returns (address, address) {
+    function getPoolTokens(bytes calldata) external view override returns (address, address) {
         return (token0, token1);
     }
 
-    function supportsPool(
-        bytes calldata
-    ) external pure override returns (bool) {
+    function supportsPool(bytes calldata) external pure override returns (bool) {
         return true;
     }
 
-    function previewRemoveLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function previewRemoveLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPositionLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128) {
+    function getPositionLiquidity(bytes calldata) external pure override returns (uint128) {
         return 0;
     }
 
@@ -400,47 +372,31 @@ contract MockTokenAdapter is ILiquidityAdapter {
     }
 
     // New interface stubs
-    function previewAddLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
-    function calculateOptimalAmount1(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount1(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function calculateOptimalAmount0(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount0(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function getPoolPrice(
-        bytes calldata
-    ) external pure override returns (uint160, int24) {
+    function getPoolPrice(bytes calldata) external pure override returns (uint160, int24) {
         return (0, 0);
     }
 
-    function getPoolFee(
-        bytes calldata
-    ) external pure override returns (uint24) {
+    function getPoolFee(bytes calldata) external pure override returns (uint24) {
         return 0;
     }
 
-    function getPositionValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPositionValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTotalValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPoolTotalValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 }

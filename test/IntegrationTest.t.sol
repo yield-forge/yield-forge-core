@@ -60,11 +60,7 @@ contract IntegrationTest is Test {
         _deployDiamond();
 
         // Deploy mock adapter
-        mockAdapter = new MockIntegrationAdapter(
-            address(token0),
-            address(token1),
-            address(diamond)
-        );
+        mockAdapter = new MockIntegrationAdapter(address(token0), address(token1), address(diamond));
 
         // Setup protocol
         _setupProtocol();
@@ -162,18 +158,12 @@ contract IntegrationTest is Test {
 
         // YieldForgeMarketFacet
         bytes4[] memory marketSelectors = new bytes4[](6);
-        marketSelectors[0] = YieldForgeMarketFacet
-            .addYieldForgeLiquidity
-            .selector;
+        marketSelectors[0] = YieldForgeMarketFacet.addYieldForgeLiquidity.selector;
         marketSelectors[1] = YieldForgeMarketFacet.swapExactQuoteForPT.selector;
         marketSelectors[2] = YieldForgeMarketFacet.swapExactPTForQuote.selector;
-        marketSelectors[3] = YieldForgeMarketFacet
-            .getYieldForgeMarketInfo
-            .selector;
+        marketSelectors[3] = YieldForgeMarketFacet.getYieldForgeMarketInfo.selector;
         marketSelectors[4] = YieldForgeMarketFacet.getPtPrice.selector;
-        marketSelectors[5] = YieldForgeMarketFacet
-            .removeYieldForgeLiquidity
-            .selector;
+        marketSelectors[5] = YieldForgeMarketFacet.removeYieldForgeLiquidity.selector;
         cut[6] = IDiamondCut.FacetCut({
             facetAddress: address(yieldForgeMarketFacet),
             action: IDiamondCut.FacetCutAction.Add,
@@ -185,22 +175,18 @@ contract IntegrationTest is Test {
         pauseSelectors[0] = PauseFacet.pause.selector;
         pauseSelectors[1] = PauseFacet.paused.selector;
         cut[7] = IDiamondCut.FacetCut({
-            facetAddress: address(pauseFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: pauseSelectors
+            facetAddress: address(pauseFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: pauseSelectors
         });
 
         // Empty cut for 9th slot
         bytes4[] memory emptySelectors = new bytes4[](0);
         cut[8] = IDiamondCut.FacetCut({
-            facetAddress: address(0),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: emptySelectors
+            facetAddress: address(0), action: IDiamondCut.FacetCutAction.Add, functionSelectors: emptySelectors
         });
 
         // Resize array to remove empty cut
         IDiamondCut.FacetCut[] memory finalCut = new IDiamondCut.FacetCut[](8);
-        for (uint i = 0; i < 8; i++) {
+        for (uint256 i = 0; i < 8; i++) {
             finalCut[i] = cut[i];
         }
 
@@ -212,18 +198,12 @@ contract IntegrationTest is Test {
         PoolRegistryFacet(address(diamond)).initialize(treasury);
 
         // Approve adapter and quote token
-        PoolRegistryFacet(address(diamond)).approveAdapter(
-            address(mockAdapter)
-        );
+        PoolRegistryFacet(address(diamond)).approveAdapter(address(mockAdapter));
         PoolRegistryFacet(address(diamond)).approveQuoteToken(address(token0));
 
         // Register pool
         bytes memory poolParams = abi.encode(address(0xB001));
-        poolId = PoolRegistryFacet(address(diamond)).registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(token0)
-        );
+        poolId = PoolRegistryFacet(address(diamond)).registerPool(address(mockAdapter), poolParams, address(token0));
 
         // Mint tokens to users
         token0.mint(user1, 100000e18);
@@ -245,15 +225,8 @@ contract IntegrationTest is Test {
         token0.approve(address(diamond), 1000e18);
         token1.approve(address(diamond), 1000e18);
 
-        (
-            uint256 liquidity,
-            uint256 ptAmount,
-            uint256 ytAmount
-        ) = LiquidityFacet(address(diamond)).addLiquidity(
-                poolId,
-                1000e18,
-                1000e18
-            );
+        (uint256 liquidity, uint256 ptAmount, uint256 ytAmount) =
+            LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
         vm.stopPrank();
 
         // Verify PT/YT minted
@@ -261,9 +234,7 @@ contract IntegrationTest is Test {
         assertEq(ptAmount, ytAmount, "PT and YT should be equal");
 
         // Step 2: Time passes to maturity
-        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(
-            address(diamond)
-        ).getCycleInfo(poolId, 1);
+        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, 1);
         vm.warp(cycleInfo.maturityDate + 1);
 
         // Step 3: User redeems PT
@@ -275,13 +246,14 @@ contract IntegrationTest is Test {
         token1.mint(address(mockAdapter), 1000e18);
 
         vm.prank(user1);
-        (uint256 amount0, uint256 amount1) = RedemptionFacet(address(diamond))
-            .redeemPT(
-                poolId,
-                1,
-                ptBalance,
-                1000 // 10% max slippage
-            );
+        (uint256 amount0, uint256 amount1) =
+            RedemptionFacet(address(diamond))
+                .redeemPT(
+                    poolId,
+                    1,
+                    ptBalance,
+                    1000 // 10% max slippage
+                );
 
         // Verify redemption
         assertGt(amount0 + amount1, 0, "Should receive tokens on redemption");
@@ -313,30 +285,18 @@ contract IntegrationTest is Test {
         YieldAccumulatorFacet(address(diamond)).harvestYield(poolId);
 
         // Get cycle info for YT token
-        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(
-            address(diamond)
-        ).getCycleInfo(poolId, 1);
+        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, 1);
         YieldToken yt = YieldToken(cycleInfo.ytToken);
 
         // Check pending yield for both users
-        (uint256 pending0User1, uint256 pending1User1) = YieldAccumulatorFacet(
-            address(diamond)
-        ).getPendingYield(poolId, 1, user1);
-        (uint256 pending0User2, uint256 pending1User2) = YieldAccumulatorFacet(
-            address(diamond)
-        ).getPendingYield(poolId, 1, user2);
+        (uint256 pending0User1, uint256 pending1User1) =
+            YieldAccumulatorFacet(address(diamond)).getPendingYield(poolId, 1, user1);
+        (uint256 pending0User2, uint256 pending1User2) =
+            YieldAccumulatorFacet(address(diamond)).getPendingYield(poolId, 1, user2);
 
         // Both users should have pending yield (proportional to YT holdings)
-        assertGt(
-            pending0User1 + pending1User1,
-            0,
-            "User1 should have pending yield"
-        );
-        assertGt(
-            pending0User2 + pending1User2,
-            0,
-            "User2 should have pending yield"
-        );
+        assertGt(pending0User1 + pending1User1, 0, "User1 should have pending yield");
+        assertGt(pending0User2 + pending1User2, 0, "User2 should have pending yield");
     }
 
     /**
@@ -351,9 +311,7 @@ contract IntegrationTest is Test {
         vm.stopPrank();
 
         // Step 2: Activate secondary market with PT
-        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(
-            address(diamond)
-        ).getCycleInfo(poolId, 1);
+        LibAppStorage.CycleInfo memory cycleInfo = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, 1);
         PrincipalToken pt = PrincipalToken(cycleInfo.ptToken);
         uint256 ptBalance = pt.balanceOf(user1);
 
@@ -368,22 +326,9 @@ contract IntegrationTest is Test {
         vm.stopPrank();
 
         // Verify market activated
-        (
-            LibAppStorage.YieldForgeMarketStatus status,
-            ,
-            ,
-            ,
-            ,
-            ,
-
-        ) = YieldForgeMarketFacet(address(diamond)).getYieldForgeMarketInfo(
-                poolId
-            );
-        assertEq(
-            uint(status),
-            uint(LibAppStorage.YieldForgeMarketStatus.ACTIVE),
-            "Market should be active"
-        );
+        (LibAppStorage.YieldForgeMarketStatus status,,,,,,) =
+            YieldForgeMarketFacet(address(diamond)).getYieldForgeMarketInfo(poolId);
+        assertEq(uint256(status), uint256(LibAppStorage.YieldForgeMarketStatus.ACTIVE), "Market should be active");
         assertGt(lpTokens, 0, "LP tokens should be minted");
 
         // Step 3: User2 buys PT with quote token
@@ -434,11 +379,8 @@ contract IntegrationTest is Test {
         vm.stopPrank();
 
         // Get cycle 1 info
-        uint256 cycle1Id = PoolRegistryFacet(address(diamond))
-            .getCurrentCycleId(poolId);
-        LibAppStorage.CycleInfo memory cycle1Info = PoolRegistryFacet(
-            address(diamond)
-        ).getCycleInfo(poolId, cycle1Id);
+        uint256 cycle1Id = PoolRegistryFacet(address(diamond)).getCurrentCycleId(poolId);
+        LibAppStorage.CycleInfo memory cycle1Info = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, cycle1Id);
         assertEq(cycle1Id, 1, "Should be cycle 1");
 
         // Warp past maturity
@@ -450,8 +392,7 @@ contract IntegrationTest is Test {
         vm.stopPrank();
 
         // Verify new cycle created
-        uint256 cycle2Id = PoolRegistryFacet(address(diamond))
-            .getCurrentCycleId(poolId);
+        uint256 cycle2Id = PoolRegistryFacet(address(diamond)).getCurrentCycleId(poolId);
         assertEq(cycle2Id, 2, "Should be cycle 2");
 
         // Cycle 1 PT should still be redeemable
@@ -491,9 +432,7 @@ contract MockIntegrationAdapter is ILiquidityAdapter {
         yield1 = _yield1;
     }
 
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
@@ -516,10 +455,11 @@ contract MockIntegrationAdapter is ILiquidityAdapter {
         return (liquidity, amount0Used, amount1Used);
     }
 
-    function removeLiquidity(
-        uint128 liquidity,
-        bytes calldata
-    ) external override returns (uint256 amount0, uint256 amount1) {
+    function removeLiquidity(uint128 liquidity, bytes calldata)
+        external
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
         amount0 = uint256(liquidity);
         amount1 = uint256(liquidity);
 
@@ -534,9 +474,7 @@ contract MockIntegrationAdapter is ILiquidityAdapter {
         return (amount0, amount1);
     }
 
-    function collectYield(
-        bytes calldata
-    ) external override returns (uint256, uint256) {
+    function collectYield(bytes calldata) external override returns (uint256, uint256) {
         uint256 y0 = yield0;
         uint256 y1 = yield1;
         yield0 = 0;
@@ -544,28 +482,24 @@ contract MockIntegrationAdapter is ILiquidityAdapter {
         return (y0, y1);
     }
 
-    function getPoolTokens(
-        bytes calldata
-    ) external view override returns (address, address) {
+    function getPoolTokens(bytes calldata) external view override returns (address, address) {
         return (token0, token1);
     }
 
-    function supportsPool(
-        bytes calldata
-    ) external pure override returns (bool) {
+    function supportsPool(bytes calldata) external pure override returns (bool) {
         return true;
     }
 
-    function previewRemoveLiquidity(
-        uint128 liquidity,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function previewRemoveLiquidity(uint128 liquidity, bytes calldata)
+        external
+        pure
+        override
+        returns (uint256, uint256)
+    {
         return (uint256(liquidity), uint256(liquidity));
     }
 
-    function getPositionLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128) {
+    function getPositionLiquidity(bytes calldata) external pure override returns (uint128) {
         return 1000e18;
     }
 
@@ -578,47 +512,31 @@ contract MockIntegrationAdapter is ILiquidityAdapter {
     }
 
     // New interface stubs
-    function previewAddLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
-    function calculateOptimalAmount1(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount1(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function calculateOptimalAmount0(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount0(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function getPoolPrice(
-        bytes calldata
-    ) external pure override returns (uint160, int24) {
+    function getPoolPrice(bytes calldata) external pure override returns (uint160, int24) {
         return (0, 0);
     }
 
-    function getPoolFee(
-        bytes calldata
-    ) external pure override returns (uint24) {
+    function getPoolFee(bytes calldata) external pure override returns (uint24) {
         return 0;
     }
 
-    function getPositionValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPositionValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTotalValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPoolTotalValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 }

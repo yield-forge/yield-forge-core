@@ -9,12 +9,8 @@ import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
 import {PrincipalToken} from "../tokens/PrincipalToken.sol";
 import {YieldToken} from "../tokens/YieldToken.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    IERC20Metadata
-} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title LiquidityFacet
@@ -176,11 +172,10 @@ contract LiquidityFacet {
      *       1000e6    // 1000 token1 (if 6 decimals)
      *   );
      */
-    function addLiquidity(
-        bytes32 poolId,
-        uint256 amount0,
-        uint256 amount1
-    ) external returns (uint256 liquidity, uint256 ptAmount, uint256 ytAmount) {
+    function addLiquidity(bytes32 poolId, uint256 amount0, uint256 amount1)
+        external
+        returns (uint256 liquidity, uint256 ptAmount, uint256 ytAmount)
+    {
         // ===== SECURITY CHECKS =====
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
@@ -212,18 +207,10 @@ contract LiquidityFacet {
         // ===== TRANSFER TOKENS FROM USER =====
 
         if (amount0 > 0) {
-            IERC20(pool.token0).safeTransferFrom(
-                msg.sender,
-                address(this),
-                amount0
-            );
+            IERC20(pool.token0).safeTransferFrom(msg.sender, address(this), amount0);
         }
         if (amount1 > 0) {
-            IERC20(pool.token1).safeTransferFrom(
-                msg.sender,
-                address(this),
-                amount1
-            );
+            IERC20(pool.token1).safeTransferFrom(msg.sender, address(this), amount1);
         }
 
         // ===== CALL ADAPTER =====
@@ -245,9 +232,8 @@ contract LiquidityFacet {
         uint256 amount0Used;
         uint256 amount1Used;
 
-        (liquidityReceived, amount0Used, amount1Used) = adapter.addLiquidity(
-            _encodeAdapterParams(pool.poolParams, amount0, amount1)
-        );
+        (liquidityReceived, amount0Used, amount1Used) =
+            adapter.addLiquidity(_encodeAdapterParams(pool.poolParams, amount0, amount1));
 
         liquidity = uint256(liquidityReceived);
 
@@ -273,11 +259,7 @@ contract LiquidityFacet {
         // This gives users a meaningful, human-readable token amount
         // Example: deposit 1 WBTC + 90k USDT → receive ~180k PT/YT
 
-        uint256 valueInQuote = _calculateValueInQuote(
-            amount0Used,
-            amount1Used,
-            pool
-        );
+        uint256 valueInQuote = _calculateValueInQuote(amount0Used, amount1Used, pool);
 
         // ===== MINT TOKENS TO USER =====
         // No mint fee - user receives full amount
@@ -288,14 +270,7 @@ contract LiquidityFacet {
         ptAmount = valueInQuote;
         ytAmount = valueInQuote;
 
-        emit LiquidityAdded(
-            poolId,
-            cycleId,
-            msg.sender,
-            liquidity,
-            ptAmount,
-            ytAmount
-        );
+        emit LiquidityAdded(poolId, cycleId, msg.sender, liquidity, ptAmount, ytAmount);
 
         // ===== EMIT TVL UPDATE =====
         _emitTvlUpdated(poolId, cycleId, pool);
@@ -327,9 +302,7 @@ contract LiquidityFacet {
         }
 
         // Case 2: Check if current cycle has matured
-        LibAppStorage.CycleInfo storage currentCycle = s.cycles[poolId][
-            cycleId
-        ];
+        LibAppStorage.CycleInfo storage currentCycle = s.cycles[poolId][cycleId];
 
         if (block.timestamp >= currentCycle.maturityDate) {
             // Deactivate old cycle
@@ -365,18 +338,12 @@ contract LiquidityFacet {
 
         // Generate token name components
         string memory hashStr = TokenNaming.poolIdToShortHash(poolId);
-        string memory maturityStr = TokenNaming.formatMaturityDate(
-            maturityDate
-        );
+        string memory maturityStr = TokenNaming.formatMaturityDate(maturityDate);
 
         // Create token names
         // Format: YF-PT-A3F2E9-31MAR2025
-        string memory ptName = string(
-            abi.encodePacked("YF-PT-", hashStr, "-", maturityStr)
-        );
-        string memory ytName = string(
-            abi.encodePacked("YF-YT-", hashStr, "-", maturityStr)
-        );
+        string memory ptName = string(abi.encodePacked("YF-PT-", hashStr, "-", maturityStr));
+        string memory ytName = string(abi.encodePacked("YF-YT-", hashStr, "-", maturityStr));
 
         // Deploy new PT token
         PrincipalToken pt = new PrincipalToken(
@@ -425,9 +392,7 @@ contract LiquidityFacet {
 
         // Initialize secondary market in PENDING status
         // Will become ACTIVE when first LP provides liquidity
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][newCycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][newCycleId];
         market.status = LibAppStorage.YieldForgeMarketStatus.PENDING;
         market.ptReserve = 0;
         market.virtualQuoteReserve = 0;
@@ -436,14 +401,7 @@ contract LiquidityFacet {
         market.accumulatedFeesQuote = 0;
         market.createdAt = block.timestamp;
 
-        emit NewCycleStarted(
-            poolId,
-            newCycleId,
-            block.timestamp,
-            maturityDate,
-            address(pt),
-            address(yt)
-        );
+        emit NewCycleStarted(poolId, newCycleId, block.timestamp, maturityDate, address(pt), address(yt));
     }
 
     /**
@@ -458,11 +416,11 @@ contract LiquidityFacet {
      * @param amount1 Token1 amount
      * @return Encoded params for adapter
      */
-    function _encodeAdapterParams(
-        bytes memory poolParams,
-        uint256 amount0,
-        uint256 amount1
-    ) internal pure returns (bytes memory) {
+    function _encodeAdapterParams(bytes memory poolParams, uint256 amount0, uint256 amount1)
+        internal
+        pure
+        returns (bytes memory)
+    {
         // Concatenate poolParams with encoded amounts
         // This produces the format adapters expect:
         // - V4: (PoolKey, uint256, uint256)
@@ -490,14 +448,14 @@ contract LiquidityFacet {
      * @param pool Pool information
      * @return valueInQuote Total value in quote token, normalized to 18 decimals
      */
-    function _calculateValueInQuote(
-        uint256 amount0Used,
-        uint256 amount1Used,
-        LibAppStorage.PoolInfo storage pool
-    ) internal view returns (uint256 valueInQuote) {
+    function _calculateValueInQuote(uint256 amount0Used, uint256 amount1Used, LibAppStorage.PoolInfo storage pool)
+        internal
+        view
+        returns (uint256 valueInQuote)
+    {
         // Get current price from adapter
         ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
-        (uint160 sqrtPriceX96, ) = adapter.getPoolPrice(pool.poolParams);
+        (uint160 sqrtPriceX96,) = adapter.getPoolPrice(pool.poolParams);
 
         // Get token decimals
         uint8 decimals0 = IERC20Metadata(pool.token0).decimals();
@@ -633,19 +591,10 @@ contract LiquidityFacet {
      * @return amount0Used Actual token0 that will be used
      * @return amount1Used Actual token1 that will be used
      */
-    function previewAddLiquidity(
-        bytes32 poolId,
-        uint256 amount0,
-        uint256 amount1
-    )
+    function previewAddLiquidity(bytes32 poolId, uint256 amount0, uint256 amount1)
         external
         view
-        returns (
-            uint256 expectedPT,
-            uint256 expectedYT,
-            uint256 amount0Used,
-            uint256 amount1Used
-        )
+        returns (uint256 expectedPT, uint256 expectedYT, uint256 amount0Used, uint256 amount1Used)
     {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.PoolInfo storage pool = s.pools[poolId];
@@ -653,15 +602,9 @@ contract LiquidityFacet {
         if (pool.adapter == address(0)) revert PoolDoesNotExist(poolId);
 
         ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
-        bytes memory adapterParams = _encodeAdapterPreviewParams(
-            pool.poolParams,
-            amount0,
-            amount1
-        );
+        bytes memory adapterParams = _encodeAdapterPreviewParams(pool.poolParams, amount0, amount1);
 
-        (, uint256 a0Used, uint256 a1Used) = adapter.previewAddLiquidity(
-            adapterParams
-        );
+        (, uint256 a0Used, uint256 a1Used) = adapter.previewAddLiquidity(adapterParams);
 
         amount0Used = a0Used;
         amount1Used = a1Used;
@@ -682,10 +625,7 @@ contract LiquidityFacet {
      * @param amount0 Amount of token0
      * @return amount1 Optimal amount of token1
      */
-    function calculateOptimalAmount1(
-        bytes32 poolId,
-        uint256 amount0
-    ) external view returns (uint256 amount1) {
+    function calculateOptimalAmount1(bytes32 poolId, uint256 amount0) external view returns (uint256 amount1) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.PoolInfo storage pool = s.pools[poolId];
 
@@ -703,10 +643,7 @@ contract LiquidityFacet {
      * @param amount1 Amount of token1
      * @return amount0 Optimal amount of token0
      */
-    function calculateOptimalAmount0(
-        bytes32 poolId,
-        uint256 amount1
-    ) external view returns (uint256 amount0) {
+    function calculateOptimalAmount0(bytes32 poolId, uint256 amount1) external view returns (uint256 amount0) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.PoolInfo storage pool = s.pools[poolId];
 
@@ -720,11 +657,11 @@ contract LiquidityFacet {
      * @notice Encode adapter params for preview
      * @dev Same encoding as _encodeAdapterParams
      */
-    function _encodeAdapterPreviewParams(
-        bytes memory poolParams,
-        uint256 amount0,
-        uint256 amount1
-    ) internal pure returns (bytes memory) {
+    function _encodeAdapterPreviewParams(bytes memory poolParams, uint256 amount0, uint256 amount1)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return bytes.concat(poolParams, abi.encode(amount0, amount1));
     }
 
@@ -735,45 +672,20 @@ contract LiquidityFacet {
      * @param cycleId Current cycle
      * @param pool Pool info storage reference
      */
-    function _emitTvlUpdated(
-        bytes32 poolId,
-        uint256 cycleId,
-        LibAppStorage.PoolInfo storage pool
-    ) internal {
+    function _emitTvlUpdated(bytes32 poolId, uint256 cycleId, LibAppStorage.PoolInfo storage pool) internal {
         ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
 
         // Get YieldForge position value
-        (uint256 yfAmount0, uint256 yfAmount1) = adapter.getPositionValue(
-            pool.poolParams
-        );
+        (uint256 yfAmount0, uint256 yfAmount1) = adapter.getPositionValue(pool.poolParams);
 
         // Get total pool value
-        (uint256 poolAmount0, uint256 poolAmount1) = adapter.getPoolTotalValue(
-            pool.poolParams
-        );
+        (uint256 poolAmount0, uint256 poolAmount1) = adapter.getPoolTotalValue(pool.poolParams);
 
         // Calculate values in quote token (normalized to 18 decimals)
-        uint256 yfTvlInQuote = _calculateValueInQuote(
-            yfAmount0,
-            yfAmount1,
-            pool
-        );
-        uint256 poolTvlInQuote = _calculateValueInQuote(
-            poolAmount0,
-            poolAmount1,
-            pool
-        );
+        uint256 yfTvlInQuote = _calculateValueInQuote(yfAmount0, yfAmount1, pool);
+        uint256 poolTvlInQuote = _calculateValueInQuote(poolAmount0, poolAmount1, pool);
 
-        emit TvlUpdated(
-            poolId,
-            cycleId,
-            yfAmount0,
-            yfAmount1,
-            yfTvlInQuote,
-            poolAmount0,
-            poolAmount1,
-            poolTvlInQuote
-        );
+        emit TvlUpdated(poolId, cycleId, yfAmount0, yfAmount1, yfTvlInQuote, poolAmount0, poolAmount1, poolTvlInQuote);
     }
 
     // ============================================================
@@ -789,13 +701,7 @@ contract LiquidityFacet {
      * @return amount1 Value in token1
      * @return valueInQuote Value in quote token (18 decimals)
      */
-    function getTvl(
-        bytes32 poolId
-    )
-        external
-        view
-        returns (uint256 amount0, uint256 amount1, uint256 valueInQuote)
-    {
+    function getTvl(bytes32 poolId) external view returns (uint256 amount0, uint256 amount1, uint256 valueInQuote) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.PoolInfo storage pool = s.pools[poolId];
 
@@ -815,9 +721,7 @@ contract LiquidityFacet {
      * @return amount1 Total token1 in pool
      * @return valueInQuote Total value in quote token (18 decimals)
      */
-    function getPoolTotalTvl(
-        bytes32 poolId
-    )
+    function getPoolTotalTvl(bytes32 poolId)
         external
         view
         returns (uint256 amount0, uint256 amount1, uint256 valueInQuote)

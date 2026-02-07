@@ -3,9 +3,7 @@ pragma solidity ^0.8.26;
 
 import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title ICurveStableSwap
@@ -18,19 +16,13 @@ interface ICurveStableSwap {
     /// @param amounts Array of token amounts to add [token0, token1]
     /// @param min_mint_amount Minimum LP tokens to receive
     /// @return LP tokens minted
-    function add_liquidity(
-        uint256[2] calldata amounts,
-        uint256 min_mint_amount
-    ) external returns (uint256);
+    function add_liquidity(uint256[2] calldata amounts, uint256 min_mint_amount) external returns (uint256);
 
     /// @notice Remove liquidity from the pool
     /// @param _amount LP tokens to burn
     /// @param min_amounts Minimum amounts to receive [token0, token1]
     /// @return Amounts received [token0, token1]
-    function remove_liquidity(
-        uint256 _amount,
-        uint256[2] calldata min_amounts
-    ) external returns (uint256[2] memory);
+    function remove_liquidity(uint256 _amount, uint256[2] calldata min_amounts) external returns (uint256[2] memory);
 
     /// @notice Get token at index
     function coins(uint256 i) external view returns (address);
@@ -76,10 +68,7 @@ interface ICurveGauge {
     function reward_count() external view returns (uint256);
 
     /// @notice Get claimable reward for specific token
-    function claimable_reward(
-        address user,
-        address token
-    ) external view returns (uint256);
+    function claimable_reward(address user, address token) external view returns (uint256);
 
     /// @notice LP token address
     function lp_token() external view returns (address);
@@ -170,26 +159,14 @@ contract CurveAdapter is ILiquidityAdapter {
     // ============================================================
 
     event CurveLiquidityAdded(
-        address indexed pool,
-        address indexed gauge,
-        uint256 lpTokens,
-        uint256 amount0,
-        uint256 amount1
+        address indexed pool, address indexed gauge, uint256 lpTokens, uint256 amount0, uint256 amount1
     );
 
     event CurveLiquidityRemoved(
-        address indexed pool,
-        address indexed gauge,
-        uint256 lpTokens,
-        uint256 amount0,
-        uint256 amount1
+        address indexed pool, address indexed gauge, uint256 lpTokens, uint256 amount0, uint256 amount1
     );
 
-    event CurveYieldCollected(
-        address indexed pool,
-        address indexed gauge,
-        uint256 crvAmount
-    );
+    event CurveYieldCollected(address indexed pool, address indexed gauge, uint256 crvAmount);
 
     // ============================================================
     //                       CONSTRUCTOR
@@ -237,21 +214,15 @@ contract CurveAdapter is ILiquidityAdapter {
      * @return amount0Used Actual token0 used
      * @return amount1Used Actual token1 used
      */
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         override
         onlyDiamond
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
         // Decode parameters
-        (
-            address curvePool,
-            address gauge,
-            uint256 amount0,
-            uint256 amount1
-        ) = abi.decode(params, (address, address, uint256, uint256));
+        (address curvePool, address gauge, uint256 amount0, uint256 amount1) =
+            abi.decode(params, (address, address, uint256, uint256));
 
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
         ICurveGauge curveGauge = ICurveGauge(gauge);
@@ -300,13 +271,7 @@ contract CurveAdapter is ILiquidityAdapter {
         // Use LP token amount as liquidity (fits in uint128 for reasonable amounts)
         liquidity = uint128(lpReceived);
 
-        emit CurveLiquidityAdded(
-            curvePool,
-            gauge,
-            lpReceived,
-            amount0Used,
-            amount1Used
-        );
+        emit CurveLiquidityAdded(curvePool, gauge, lpReceived, amount0Used, amount1Used);
         emit LiquidityAdded(diamond, liquidity, amount0Used, amount1Used);
     }
 
@@ -319,15 +284,14 @@ contract CurveAdapter is ILiquidityAdapter {
      * @return amount0 Token0 received
      * @return amount1 Token1 received
      */
-    function removeLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external override onlyDiamond returns (uint256 amount0, uint256 amount1) {
+    function removeLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        override
+        onlyDiamond
+        returns (uint256 amount0, uint256 amount1)
+    {
         // Decode parameters
-        (address curvePool, address gauge) = abi.decode(
-            params,
-            (address, address)
-        );
+        (address curvePool, address gauge) = abi.decode(params, (address, address));
 
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
         ICurveGauge curveGauge = ICurveGauge(gauge);
@@ -361,13 +325,7 @@ contract CurveAdapter is ILiquidityAdapter {
             IERC20(token1).safeTransfer(diamond, amount1);
         }
 
-        emit CurveLiquidityRemoved(
-            curvePool,
-            gauge,
-            uint256(liquidity),
-            amount0,
-            amount1
-        );
+        emit CurveLiquidityRemoved(curvePool, gauge, uint256(liquidity), amount0, amount1);
         emit LiquidityRemoved(diamond, liquidity, amount0, amount1);
     }
 
@@ -385,9 +343,12 @@ contract CurveAdapter is ILiquidityAdapter {
      * @return yield0 CRV tokens collected (returned as yield0)
      * @return yield1 Always 0 (Curve rewards are single-token)
      */
-    function collectYield(
-        bytes calldata params
-    ) external override onlyDiamond returns (uint256 yield0, uint256 yield1) {
+    function collectYield(bytes calldata params)
+        external
+        override
+        onlyDiamond
+        returns (uint256 yield0, uint256 yield1)
+    {
         // Decode parameters
         (, address gauge) = abi.decode(params, (address, address));
 
@@ -400,8 +361,7 @@ contract CurveAdapter is ILiquidityAdapter {
         curveGauge.claim_rewards();
 
         // Calculate CRV received
-        uint256 crvReceived = IERC20(crvToken).balanceOf(address(this)) -
-            crvBefore;
+        uint256 crvReceived = IERC20(crvToken).balanceOf(address(this)) - crvBefore;
 
         // Transfer CRV to diamond
         if (crvReceived > 0) {
@@ -439,9 +399,7 @@ contract CurveAdapter is ILiquidityAdapter {
      * @param params Encoded pool and gauge addresses
      * @return liquidity Staked LP tokens
      */
-    function getPositionLiquidity(
-        bytes calldata params
-    ) external view override returns (uint128 liquidity) {
+    function getPositionLiquidity(bytes calldata params) external view override returns (uint128 liquidity) {
         (, address gauge) = abi.decode(params, (address, address));
         ICurveGauge curveGauge = ICurveGauge(gauge);
 
@@ -455,10 +413,8 @@ contract CurveAdapter is ILiquidityAdapter {
      * @return token0 First token
      * @return token1 Second token
      */
-    function getPoolTokens(
-        bytes calldata params
-    ) external view override returns (address token0, address token1) {
-        (address curvePool, ) = abi.decode(params, (address, address));
+    function getPoolTokens(bytes calldata params) external view override returns (address token0, address token1) {
+        (address curvePool,) = abi.decode(params, (address, address));
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
 
         token0 = pool.coins(0);
@@ -479,14 +435,13 @@ contract CurveAdapter is ILiquidityAdapter {
      * @return amount0 Estimated token0 to receive
      * @return amount1 Estimated token1 to receive
      */
-    function previewRemoveLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
-        (address curvePool, address gauge) = abi.decode(
-            params,
-            (address, address)
-        );
+    function previewRemoveLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
+        (address curvePool, address gauge) = abi.decode(params, (address, address));
 
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
         ICurveGauge curveGauge = ICurveGauge(gauge);
@@ -510,9 +465,7 @@ contract CurveAdapter is ILiquidityAdapter {
      * @notice Check if pool is supported
      * @dev Validates pool has 2 tokens and gauge is valid
      */
-    function supportsPool(
-        bytes calldata params
-    ) external view override returns (bool) {
+    function supportsPool(bytes calldata params) external view override returns (bool) {
         try this.validatePool(params) returns (bool result) {
             return result;
         } catch {
@@ -522,10 +475,7 @@ contract CurveAdapter is ILiquidityAdapter {
 
     /// @notice Helper to validate pool (used by supportsPool)
     function validatePool(bytes calldata params) external view returns (bool) {
-        (address curvePool, address gauge) = abi.decode(
-            params,
-            (address, address)
-        );
+        (address curvePool, address gauge) = abi.decode(params, (address, address));
 
         // Check pool has 2 tokens
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
@@ -564,20 +514,14 @@ contract CurveAdapter is ILiquidityAdapter {
      * @dev Calculates based on pool proportions
      * @param params Encoded (curvePool, gauge, amount0, amount1)
      */
-    function previewAddLiquidity(
-        bytes calldata params
-    )
+    function previewAddLiquidity(bytes calldata params)
         external
         view
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        (
-            address curvePool,
-            address gauge,
-            uint256 amount0,
-            uint256 amount1
-        ) = abi.decode(params, (address, address, uint256, uint256));
+        (address curvePool, address gauge, uint256 amount0, uint256 amount1) =
+            abi.decode(params, (address, address, uint256, uint256));
 
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
         ICurveGauge curveGauge = ICurveGauge(gauge);
@@ -621,11 +565,13 @@ contract CurveAdapter is ILiquidityAdapter {
      * @notice Calculate optimal amount1 for given amount0
      * @dev Uses pool reserves ratio
      */
-    function calculateOptimalAmount1(
-        uint256 amount0,
-        bytes calldata params
-    ) external view override returns (uint256 amount1) {
-        (address curvePool, ) = abi.decode(params, (address, address));
+    function calculateOptimalAmount1(uint256 amount0, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount1)
+    {
+        (address curvePool,) = abi.decode(params, (address, address));
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
 
         uint256 reserve0 = pool.balances(0);
@@ -640,11 +586,13 @@ contract CurveAdapter is ILiquidityAdapter {
      * @notice Calculate optimal amount0 for given amount1
      * @dev Uses pool reserves ratio
      */
-    function calculateOptimalAmount0(
-        uint256 amount1,
-        bytes calldata params
-    ) external view override returns (uint256 amount0) {
-        (address curvePool, ) = abi.decode(params, (address, address));
+    function calculateOptimalAmount0(uint256 amount1, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0)
+    {
+        (address curvePool,) = abi.decode(params, (address, address));
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
 
         uint256 reserve0 = pool.balances(0);
@@ -659,9 +607,7 @@ contract CurveAdapter is ILiquidityAdapter {
      * @notice Get current pool price
      * @dev Curve doesn't use sqrtPriceX96, returns 0 for both values
      */
-    function getPoolPrice(
-        bytes calldata params
-    ) external pure override returns (uint160 sqrtPriceX96, int24 tick) {
+    function getPoolPrice(bytes calldata params) external pure override returns (uint160 sqrtPriceX96, int24 tick) {
         // Curve doesn't use Uniswap-style pricing
         params; // silence unused warning
         return (0, 0);
@@ -671,10 +617,8 @@ contract CurveAdapter is ILiquidityAdapter {
      * @notice Get pool fee tier
      * @dev Returns Curve fee in 1e10 format, converted to basis points
      */
-    function getPoolFee(
-        bytes calldata params
-    ) external view override returns (uint24 fee) {
-        (address curvePool, ) = abi.decode(params, (address, address));
+    function getPoolFee(bytes calldata params) external view override returns (uint24 fee) {
+        (address curvePool,) = abi.decode(params, (address, address));
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
 
         // Curve fee is in 1e10 format (e.g., 4000000 = 0.04% = 4 bps)
@@ -698,13 +642,8 @@ contract CurveAdapter is ILiquidityAdapter {
      * @return amount0 Value of our position in token0
      * @return amount1 Value of our position in token1
      */
-    function getPositionValue(
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
-        (address curvePool, address gauge) = abi.decode(
-            params,
-            (address, address)
-        );
+    function getPositionValue(bytes calldata params) external view override returns (uint256 amount0, uint256 amount1) {
+        (address curvePool, address gauge) = abi.decode(params, (address, address));
 
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
         ICurveGauge curveGauge = ICurveGauge(gauge);
@@ -737,10 +676,13 @@ contract CurveAdapter is ILiquidityAdapter {
      * @return amount0 Total token0 in the pool
      * @return amount1 Total token1 in the pool
      */
-    function getPoolTotalValue(
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
-        (address curvePool, ) = abi.decode(params, (address, address));
+    function getPoolTotalValue(bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
+        (address curvePool,) = abi.decode(params, (address, address));
 
         ICurveStableSwap pool = ICurveStableSwap(curvePool);
 

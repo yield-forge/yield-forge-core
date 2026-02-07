@@ -20,17 +20,12 @@ import {YTOrderbookFacet} from "../src/facets/YTOrderbookFacet.sol";
 
 contract DeployHelper {
     // Helper to create a FacetCut struct
-    function createCut(
-        address facetAddress,
-        IDiamondCut.FacetCutAction action,
-        bytes4[] memory selectors
-    ) internal pure returns (IDiamondCut.FacetCut memory) {
-        return
-            IDiamondCut.FacetCut({
-                facetAddress: facetAddress,
-                action: action,
-                functionSelectors: selectors
-            });
+    function createCut(address facetAddress, IDiamondCut.FacetCutAction action, bytes4[] memory selectors)
+        internal
+        pure
+        returns (IDiamondCut.FacetCut memory)
+    {
+        return IDiamondCut.FacetCut({facetAddress: facetAddress, action: action, functionSelectors: selectors});
     }
 
     // ========================================================================
@@ -45,11 +40,7 @@ contract DeployHelper {
         return selectors;
     }
 
-    function getDiamondLoupeSelectors()
-        internal
-        pure
-        returns (bytes4[] memory)
-    {
+    function getDiamondLoupeSelectors() internal pure returns (bytes4[] memory) {
         bytes4[] memory selectors = new bytes4[](5);
         selectors[0] = IDiamondLoupe.facets.selector;
         selectors[1] = IDiamondLoupe.facetFunctionSelectors.selector;
@@ -66,11 +57,7 @@ contract DeployHelper {
         return selectors;
     }
 
-    function getPoolRegistrySelectors()
-        internal
-        pure
-        returns (bytes4[] memory)
-    {
+    function getPoolRegistrySelectors() internal pure returns (bytes4[] memory) {
         bytes4[] memory selectors = new bytes4[](12);
         selectors[0] = PoolRegistryFacet.initialize.selector;
         selectors[1] = PoolRegistryFacet.isInitialized.selector;
@@ -118,7 +105,9 @@ contract DeployHelper {
         // getActivePT, getActiveYT, getPoolTokens, getPoolAdapter
         // Let's expand array
         bytes4[] memory expandedSelectors = new bytes4[](25);
-        for (uint i = 0; i < 21; i++) expandedSelectors[i] = selectors[i];
+        for (uint256 i = 0; i < 21; i++) {
+            expandedSelectors[i] = selectors[i];
+        }
         expandedSelectors[21] = PoolRegistryFacet.getActivePT.selector;
         expandedSelectors[22] = PoolRegistryFacet.getActiveYT.selector;
         expandedSelectors[23] = PoolRegistryFacet.getPoolTokens.selector;
@@ -141,11 +130,7 @@ contract DeployHelper {
         return selectors;
     }
 
-    function getYieldAccumulatorSelectors()
-        internal
-        pure
-        returns (bytes4[] memory)
-    {
+    function getYieldAccumulatorSelectors() internal pure returns (bytes4[] memory) {
         bytes4[] memory selectors = new bytes4[](7);
         selectors[0] = YieldAccumulatorFacet.harvestYield.selector;
         selectors[1] = YieldAccumulatorFacet.claimYield.selector;
@@ -169,11 +154,7 @@ contract DeployHelper {
         return selectors;
     }
 
-    function getYieldForgeMarketSelectors()
-        internal
-        pure
-        returns (bytes4[] memory)
-    {
+    function getYieldForgeMarketSelectors() internal pure returns (bytes4[] memory) {
         bytes4[] memory selectors = new bytes4[](11);
         selectors[0] = YieldForgeMarketFacet.addYieldForgeLiquidity.selector;
         selectors[1] = YieldForgeMarketFacet.removeYieldForgeLiquidity.selector;

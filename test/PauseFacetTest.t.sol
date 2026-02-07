@@ -30,10 +30,7 @@ contract PauseFacetTest is Test {
 
     event Paused(address account);
     event Unpaused(address account);
-    event PauseGuardianSet(
-        address indexed previousGuardian,
-        address indexed newGuardian
-    );
+    event PauseGuardianSet(address indexed previousGuardian, address indexed newGuardian);
 
     function setUp() public {
         // Deploy facets
@@ -81,9 +78,7 @@ contract PauseFacetTest is Test {
         pauseSelectors[4] = PauseFacet.pauseGuardian.selector;
 
         cut[2] = IDiamondCut.FacetCut({
-            facetAddress: address(pauseFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: pauseSelectors
+            facetAddress: address(pauseFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: pauseSelectors
         });
 
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");
@@ -92,10 +87,7 @@ contract PauseFacetTest is Test {
     // ============ Pause Tests ============
 
     function test_InitiallyNotPaused() public view {
-        assertFalse(
-            PauseFacet(address(diamond)).paused(),
-            "Should start unpaused"
-        );
+        assertFalse(PauseFacet(address(diamond)).paused(), "Should start unpaused");
     }
 
     function test_OwnerCanPause() public {
@@ -114,10 +106,7 @@ contract PauseFacetTest is Test {
         PauseFacet(address(diamond)).pause();
         PauseFacet(address(diamond)).unpause();
 
-        assertFalse(
-            PauseFacet(address(diamond)).paused(),
-            "Should be unpaused"
-        );
+        assertFalse(PauseFacet(address(diamond)).paused(), "Should be unpaused");
     }
 
     function test_UnpauseEmitsEvent() public {
@@ -160,11 +149,7 @@ contract PauseFacetTest is Test {
     function test_SetPauseGuardian() public {
         PauseFacet(address(diamond)).setPauseGuardian(guardian);
 
-        assertEq(
-            PauseFacet(address(diamond)).pauseGuardian(),
-            guardian,
-            "Guardian should be set"
-        );
+        assertEq(PauseFacet(address(diamond)).pauseGuardian(), guardian, "Guardian should be set");
     }
 
     function test_SetGuardianEmitsEvent() public {
@@ -180,10 +165,7 @@ contract PauseFacetTest is Test {
         vm.prank(guardian);
         PauseFacet(address(diamond)).pause();
 
-        assertTrue(
-            PauseFacet(address(diamond)).paused(),
-            "Guardian should be able to pause"
-        );
+        assertTrue(PauseFacet(address(diamond)).paused(), "Guardian should be able to pause");
     }
 
     function test_GuardianCannotUnpause() public {
@@ -214,9 +196,7 @@ contract PauseFacetTest is Test {
 
         IDiamondCut.FacetCut[] memory cut = new IDiamondCut.FacetCut[](1);
         cut[0] = IDiamondCut.FacetCut({
-            facetAddress: address(mockFacet),
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: address(mockFacet), action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
 
         IDiamondCut(address(diamond)).diamondCut(cut, address(0), "");

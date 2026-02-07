@@ -8,9 +8,7 @@ import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
 import {PrincipalToken} from "../tokens/PrincipalToken.sol";
 import {YieldToken} from "../tokens/YieldToken.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title RedemptionFacet
@@ -90,11 +88,7 @@ contract RedemptionFacet {
      * @param amount PT tokens upgraded
      */
     event PTUpgraded(
-        bytes32 indexed poolId,
-        uint256 indexed oldCycleId,
-        uint256 indexed newCycleId,
-        address upgrader,
-        uint256 amount
+        bytes32 indexed poolId, uint256 indexed oldCycleId, uint256 indexed newCycleId, address upgrader, uint256 amount
     );
 
     // ============================================================
@@ -108,11 +102,7 @@ contract RedemptionFacet {
     error CycleDoesNotExist(bytes32 poolId, uint256 cycleId);
 
     /// @notice Cycle has not matured yet
-    error CycleNotMatured(
-        bytes32 poolId,
-        uint256 cycleId,
-        uint256 maturityDate
-    );
+    error CycleNotMatured(bytes32 poolId, uint256 cycleId, uint256 maturityDate);
 
     /// @notice No new cycle available for upgrade
     error NoNewCycleAvailable(bytes32 poolId);
@@ -161,154 +151,9 @@ contract RedemptionFacet {
      *       100       // 1% slippage (100 bps)
      *   );
      */
-    function redeemPT(
-        bytes32 poolId,
-        uint256 cycleId,
-        uint256 ptAmount,
-        uint256 maxSlippageBps
-    ) external returns (uint256 amount0, uint256 amount1) {
-        // ===== SECURITY CHECKS =====
-        LibPause.requireNotPaused();
-        LibReentrancyGuard._nonReentrantBefore();
-
-        // ===== VALIDATION =====
-
-        if (ptAmount == 0) revert ZeroAmount();
-
-        LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
-        LibAppStorage.PoolInfo storage pool = s.pools[poolId];
-
-        if (!pool.exists) {
-            revert PoolDoesNotExist(poolId);
-        }
-
-        LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-
-        if (cycle.cycleId == 0) {
-            revert CycleDoesNotExist(poolId, cycleId);
-        }
-
-        // Check maturity
-        if (block.timestamp < cycle.maturityDate) {
-            revert CycleNotMatured(poolId, cycleId, cycle.maturityDate);
-        }
-
-        // ===== CALCULATE LIQUIDITY SHARE =====
-
-        PrincipalToken pt = PrincipalToken(cycle.ptToken);
-        uint256 totalPTSupply = pt.totalSupply();
-
-        // Check user has enough PT
-        uint256 userBalance = pt.balanceOf(msg.sender);
-        if (userBalance < ptAmount) {
-            revert InsufficientPTBalance(ptAmount, userBalance);
-        }
-
-        // Calculate liquidity to remove
-        // userLiquidity = (ptAmount * totalLiquidity) / totalPTSupply
-        uint128 liquidityToRemove = uint128(
-            (ptAmount * uint256(cycle.totalLiquidity)) / totalPTSupply
-        );
-
-        // ===== BURN PT =====
-
-        pt.burn(msg.sender, ptAmount);
-
-        // ===== REMOVE LIQUIDITY VIA ADAPTER =====
-
-        ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
-
-        // ===== PREVIEW EXPECTED AMOUNTS =====
-        (uint256 expectedAmount0, uint256 expectedAmount1) = adapter
-            .previewRemoveLiquidity(liquidityToRemove, pool.poolParams);
-
-        // Calculate minimum amounts based on slippage
-        uint256 minAmount0 = (expectedAmount0 * (10000 - maxSlippageBps)) /
-            10000;
-        uint256 minAmount1 = (expectedAmount1 * (10000 - maxSlippageBps)) /
-            10000;
-
-        // ===== REMOVE LIQUIDITY =====
-        (amount0, amount1) = adapter.removeLiquidity(
-            liquidityToRemove,
-            pool.poolParams
-        );
-
-        // ===== SLIPPAGE CHECK =====
-        if (amount0 < minAmount0) {
-            revert SlippageExceeded(minAmount0, amount0);
-        }
-        if (amount1 < minAmount1) {
-            revert SlippageExceeded(minAmount1, amount1);
-        }
-
-        // ===== UPDATE CYCLE STATE =====
-
-        cycle.totalLiquidity -= liquidityToRemove;
-
-        // ===== TRANSFER TOKENS TO USER =====
-
-        if (amount0 > 0) {
-            IERC20(pool.token0).safeTransfer(msg.sender, amount0);
-        }
-        if (amount1 > 0) {
-            IERC20(pool.token1).safeTransfer(msg.sender, amount1);
-        }
-
-        emit PTRedeemed(
-            poolId,
-            cycleId,
-            msg.sender,
-            ptAmount,
-            amount0,
-            amount1
-        );
-
-        // ===== REENTRANCY GUARD EXIT =====
-        LibReentrancyGuard._nonReentrantAfter();
-    }
-
-    /**
-     * @notice Redeem PT and receive only the pool's quoteToken
-     * @dev Convenience function that redeems PT and swaps non-quote token to quoteToken
-     *
-     * USE CASE:
-     * User wants to exit to a single token (e.g., USDC) without manual swapping.
-     * This function:
-     * 1. Redeems PT for underlying tokens (token0 + token1)
-     * 2. Returns quoteToken portion directly
-     * 3. Non-quote token needs to be swapped externally (future: integrate DEX)
-     *
-     * CURRENT LIMITATION:
-     * For MVP, this function only consolidates by returning both tokens
-     * with a flag indicating which is the quoteToken.
-     * Full zap functionality would require DEX integration.
-     *
-     * @param poolId Pool identifier
-     * @param cycleId Cycle to redeem from
-     * @param ptAmount Amount of PT to redeem
-     * @return quoteAmount Amount of quoteToken received
-     * @return nonQuoteAmount Amount of non-quote token received
-     * @return quoteToken Address of the quote token
-     * @return nonQuoteToken Address of the non-quote token
-     *
-     * Example:
-     *   // Redeem PT and know which token is quote
-     *   (uint256 quote, uint256 other, address quoteAddr, address otherAddr) =
-     *       redemption.redeemPTWithZap(poolId, 1, 100e18);
-     */
-    function redeemPTWithZap(
-        bytes32 poolId,
-        uint256 cycleId,
-        uint256 ptAmount
-    )
+    function redeemPT(bytes32 poolId, uint256 cycleId, uint256 ptAmount, uint256 maxSlippageBps)
         external
-        returns (
-            uint256 quoteAmount,
-            uint256 nonQuoteAmount,
-            address quoteToken,
-            address nonQuoteToken
-        )
+        returns (uint256 amount0, uint256 amount1)
     {
         // ===== SECURITY CHECKS =====
         LibPause.requireNotPaused();
@@ -348,9 +193,8 @@ contract RedemptionFacet {
         }
 
         // Calculate liquidity to remove
-        uint128 liquidityToRemove = uint128(
-            (ptAmount * uint256(cycle.totalLiquidity)) / totalPTSupply
-        );
+        // userLiquidity = (ptAmount * totalLiquidity) / totalPTSupply
+        uint128 liquidityToRemove = uint128((ptAmount * uint256(cycle.totalLiquidity)) / totalPTSupply);
 
         // ===== BURN PT =====
 
@@ -360,10 +204,126 @@ contract RedemptionFacet {
 
         ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
 
-        (uint256 amount0, uint256 amount1) = adapter.removeLiquidity(
-            liquidityToRemove,
-            pool.poolParams
-        );
+        // ===== PREVIEW EXPECTED AMOUNTS =====
+        (uint256 expectedAmount0, uint256 expectedAmount1) =
+            adapter.previewRemoveLiquidity(liquidityToRemove, pool.poolParams);
+
+        // Calculate minimum amounts based on slippage
+        uint256 minAmount0 = (expectedAmount0 * (10000 - maxSlippageBps)) / 10000;
+        uint256 minAmount1 = (expectedAmount1 * (10000 - maxSlippageBps)) / 10000;
+
+        // ===== REMOVE LIQUIDITY =====
+        (amount0, amount1) = adapter.removeLiquidity(liquidityToRemove, pool.poolParams);
+
+        // ===== SLIPPAGE CHECK =====
+        if (amount0 < minAmount0) {
+            revert SlippageExceeded(minAmount0, amount0);
+        }
+        if (amount1 < minAmount1) {
+            revert SlippageExceeded(minAmount1, amount1);
+        }
+
+        // ===== UPDATE CYCLE STATE =====
+
+        cycle.totalLiquidity -= liquidityToRemove;
+
+        // ===== TRANSFER TOKENS TO USER =====
+
+        if (amount0 > 0) {
+            IERC20(pool.token0).safeTransfer(msg.sender, amount0);
+        }
+        if (amount1 > 0) {
+            IERC20(pool.token1).safeTransfer(msg.sender, amount1);
+        }
+
+        emit PTRedeemed(poolId, cycleId, msg.sender, ptAmount, amount0, amount1);
+
+        // ===== REENTRANCY GUARD EXIT =====
+        LibReentrancyGuard._nonReentrantAfter();
+    }
+
+    /**
+     * @notice Redeem PT and receive only the pool's quoteToken
+     * @dev Convenience function that redeems PT and swaps non-quote token to quoteToken
+     *
+     * USE CASE:
+     * User wants to exit to a single token (e.g., USDC) without manual swapping.
+     * This function:
+     * 1. Redeems PT for underlying tokens (token0 + token1)
+     * 2. Returns quoteToken portion directly
+     * 3. Non-quote token needs to be swapped externally (future: integrate DEX)
+     *
+     * CURRENT LIMITATION:
+     * For MVP, this function only consolidates by returning both tokens
+     * with a flag indicating which is the quoteToken.
+     * Full zap functionality would require DEX integration.
+     *
+     * @param poolId Pool identifier
+     * @param cycleId Cycle to redeem from
+     * @param ptAmount Amount of PT to redeem
+     * @return quoteAmount Amount of quoteToken received
+     * @return nonQuoteAmount Amount of non-quote token received
+     * @return quoteToken Address of the quote token
+     * @return nonQuoteToken Address of the non-quote token
+     *
+     * Example:
+     *   // Redeem PT and know which token is quote
+     *   (uint256 quote, uint256 other, address quoteAddr, address otherAddr) =
+     *       redemption.redeemPTWithZap(poolId, 1, 100e18);
+     */
+    function redeemPTWithZap(bytes32 poolId, uint256 cycleId, uint256 ptAmount)
+        external
+        returns (uint256 quoteAmount, uint256 nonQuoteAmount, address quoteToken, address nonQuoteToken)
+    {
+        // ===== SECURITY CHECKS =====
+        LibPause.requireNotPaused();
+        LibReentrancyGuard._nonReentrantBefore();
+
+        // ===== VALIDATION =====
+
+        if (ptAmount == 0) revert ZeroAmount();
+
+        LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
+        LibAppStorage.PoolInfo storage pool = s.pools[poolId];
+
+        if (!pool.exists) {
+            revert PoolDoesNotExist(poolId);
+        }
+
+        LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
+
+        if (cycle.cycleId == 0) {
+            revert CycleDoesNotExist(poolId, cycleId);
+        }
+
+        // Check maturity
+        if (block.timestamp < cycle.maturityDate) {
+            revert CycleNotMatured(poolId, cycleId, cycle.maturityDate);
+        }
+
+        // ===== CALCULATE LIQUIDITY SHARE =====
+
+        PrincipalToken pt = PrincipalToken(cycle.ptToken);
+        uint256 totalPTSupply = pt.totalSupply();
+
+        // Check user has enough PT
+        uint256 userBalance = pt.balanceOf(msg.sender);
+        if (userBalance < ptAmount) {
+            revert InsufficientPTBalance(ptAmount, userBalance);
+        }
+
+        // Calculate liquidity to remove
+        uint128 liquidityToRemove = uint128((ptAmount * uint256(cycle.totalLiquidity)) / totalPTSupply);
+
+        // ===== BURN PT =====
+
+        pt.burn(msg.sender, ptAmount);
+
+        // ===== REMOVE LIQUIDITY VIA ADAPTER =====
+
+        ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
+
+        (uint256 amount0, uint256 amount1) = adapter.removeLiquidity(liquidityToRemove, pool.poolParams);
 
         // ===== UPDATE CYCLE STATE =====
 
@@ -394,14 +354,7 @@ contract RedemptionFacet {
             IERC20(nonQuoteToken).safeTransfer(msg.sender, nonQuoteAmount);
         }
 
-        emit PTRedeemed(
-            poolId,
-            cycleId,
-            msg.sender,
-            ptAmount,
-            amount0,
-            amount1
-        );
+        emit PTRedeemed(poolId, cycleId, msg.sender, ptAmount, amount0, amount1);
 
         // ===== REENTRANCY GUARD EXIT =====
         LibReentrancyGuard._nonReentrantAfter();
@@ -437,11 +390,10 @@ contract RedemptionFacet {
      *       100e18    // upgrade 100 PT
      *   );
      */
-    function upgradePT(
-        bytes32 poolId,
-        uint256 oldCycleId,
-        uint256 ptAmount
-    ) external returns (uint256 newPtAmount, uint256 newYtAmount) {
+    function upgradePT(bytes32 poolId, uint256 oldCycleId, uint256 ptAmount)
+        external
+        returns (uint256 newPtAmount, uint256 newYtAmount)
+    {
         // ===== SECURITY CHECKS =====
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
@@ -475,9 +427,7 @@ contract RedemptionFacet {
             revert NoNewCycleAvailable(poolId);
         }
 
-        LibAppStorage.CycleInfo storage newCycle = s.cycles[poolId][
-            currentCycleId
-        ];
+        LibAppStorage.CycleInfo storage newCycle = s.cycles[poolId][currentCycleId];
 
         // ===== CHECK PT BALANCE =====
 
@@ -502,13 +452,7 @@ contract RedemptionFacet {
         newPtAmount = ptAmount;
         newYtAmount = ptAmount;
 
-        emit PTUpgraded(
-            poolId,
-            oldCycleId,
-            currentCycleId,
-            msg.sender,
-            ptAmount
-        );
+        emit PTUpgraded(poolId, oldCycleId, currentCycleId, msg.sender, ptAmount);
 
         // ===== REENTRANCY GUARD EXIT =====
         LibReentrancyGuard._nonReentrantAfter();
@@ -524,10 +468,7 @@ contract RedemptionFacet {
      * @param cycleId Cycle to check
      * @return True if cycle exists and has matured
      */
-    function hasMatured(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external view returns (bool) {
+    function hasMatured(bytes32 poolId, uint256 cycleId) external view returns (bool) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
 
@@ -548,11 +489,11 @@ contract RedemptionFacet {
      * NOTE: Actual token amounts depend on pool state at redemption time.
      * Use adapter.getPoolTokens() and pool math for estimates.
      */
-    function previewRedemption(
-        bytes32 poolId,
-        uint256 cycleId,
-        uint256 ptAmount
-    ) external view returns (uint128 liquidity) {
+    function previewRedemption(bytes32 poolId, uint256 cycleId, uint256 ptAmount)
+        external
+        view
+        returns (uint128 liquidity)
+    {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
 
@@ -564,9 +505,7 @@ contract RedemptionFacet {
         if (totalPTSupply == 0) return 0;
 
         // Calculate proportional liquidity
-        liquidity = uint128(
-            (ptAmount * uint256(cycle.totalLiquidity)) / totalPTSupply
-        );
+        liquidity = uint128((ptAmount * uint256(cycle.totalLiquidity)) / totalPTSupply);
     }
 
     /**
@@ -576,10 +515,11 @@ contract RedemptionFacet {
      * @return canUpgrade_ True if upgrade is possible
      * @return newCycleId Target cycle ID (0 if no upgrade available)
      */
-    function canUpgrade(
-        bytes32 poolId,
-        uint256 oldCycleId
-    ) external view returns (bool canUpgrade_, uint256 newCycleId) {
+    function canUpgrade(bytes32 poolId, uint256 oldCycleId)
+        external
+        view
+        returns (bool canUpgrade_, uint256 newCycleId)
+    {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.CycleInfo storage oldCycle = s.cycles[poolId][oldCycleId];
 
@@ -602,11 +542,7 @@ contract RedemptionFacet {
      * @param cycleId Cycle to check
      * @return Maturity timestamp (0 if cycle doesn't exist)
      */
-    function getMaturityDate(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external view returns (uint256) {
-        return
-            LibAppStorage.diamondStorage().cycles[poolId][cycleId].maturityDate;
+    function getMaturityDate(bytes32 poolId, uint256 cycleId) external view returns (uint256) {
+        return LibAppStorage.diamondStorage().cycles[poolId][cycleId].maturityDate;
     }
 }

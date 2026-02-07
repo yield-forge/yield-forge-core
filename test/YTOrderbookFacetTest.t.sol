@@ -60,11 +60,7 @@ contract YTOrderbookFacetTest is Test {
         yieldAccumulatorFacet = new YieldAccumulatorFacet();
 
         // Deploy mock adapter
-        mockAdapter = new MockOrderbookAdapter(
-            address(quoteToken),
-            address(token1),
-            address(diamond)
-        );
+        mockAdapter = new MockOrderbookAdapter(address(quoteToken), address(token1), address(diamond));
 
         // Add facets to Diamond
         _addFacets();
@@ -157,20 +153,12 @@ contract YTOrderbookFacetTest is Test {
         PoolRegistryFacet(address(diamond)).initialize(treasury);
 
         // Approve adapter and quote token
-        PoolRegistryFacet(address(diamond)).approveAdapter(
-            address(mockAdapter)
-        );
-        PoolRegistryFacet(address(diamond)).approveQuoteToken(
-            address(quoteToken)
-        );
+        PoolRegistryFacet(address(diamond)).approveAdapter(address(mockAdapter));
+        PoolRegistryFacet(address(diamond)).approveQuoteToken(address(quoteToken));
 
         // Register pool
         bytes memory poolParams = abi.encode(address(0xB001));
-        poolId = PoolRegistryFacet(address(diamond)).registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(quoteToken)
-        );
+        poolId = PoolRegistryFacet(address(diamond)).registerPool(address(mockAdapter), poolParams, address(quoteToken));
 
         // Mint tokens to users
         quoteToken.mint(maker, 100_000e18);
@@ -224,12 +212,13 @@ contract YTOrderbookFacetTest is Test {
         vm.startPrank(maker);
         IERC20(ytToken).approve(address(diamond), ytBalance);
 
-        uint256 orderId = orderbook().placeSellOrder(
-            poolId,
-            100e18, // ytAmount
-            2e16, // pricePerYt (0.02 quote tokens per YT)
-            0 // default TTL
-        );
+        uint256 orderId = orderbook()
+            .placeSellOrder(
+                poolId,
+                100e18, // ytAmount
+                2e16, // pricePerYt (0.02 quote tokens per YT)
+                0 // default TTL
+            );
         vm.stopPrank();
 
         assertEq(orderId, 1);
@@ -249,13 +238,7 @@ contract YTOrderbookFacetTest is Test {
         _createCycleWithYT();
 
         vm.prank(maker);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.AmountTooSmall.selector,
-                0,
-                1e15
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.AmountTooSmall.selector, 0, 1e15));
         orderbook().placeSellOrder(poolId, 0, 200, 0);
     }
 
@@ -278,9 +261,7 @@ contract YTOrderbookFacetTest is Test {
 
         vm.startPrank(maker);
         // Price = 0
-        vm.expectRevert(
-            abi.encodeWithSelector(YTOrderbookFacet.InvalidPrice.selector, 0)
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.InvalidPrice.selector, 0));
         orderbook().placeSellOrder(poolId, 100e18, 0, 0);
         // Note: no upper limit on pricePerYt anymore (was BPS max 10000)
         vm.stopPrank();
@@ -293,11 +274,7 @@ contract YTOrderbookFacetTest is Test {
 
         vm.prank(maker);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.InsufficientYTBalance.selector,
-                ytBalance + 1,
-                ytBalance
-            )
+            abi.encodeWithSelector(YTOrderbookFacet.InsufficientYTBalance.selector, ytBalance + 1, ytBalance)
         );
         orderbook().placeSellOrder(poolId, ytBalance + 1, 200, 0);
     }
@@ -309,12 +286,13 @@ contract YTOrderbookFacetTest is Test {
         vm.startPrank(maker);
         IERC20(ytToken).approve(address(diamond), 100e18);
 
-        uint256 orderId = orderbook().placeSellOrder(
-            poolId,
-            100e18,
-            200,
-            1 days // custom TTL
-        );
+        uint256 orderId = orderbook()
+            .placeSellOrder(
+                poolId,
+                100e18,
+                200,
+                1 days // custom TTL
+            );
         vm.stopPrank();
 
         YTOrderbookFacet.Order memory order = orderbook().getOrder(orderId);
@@ -331,12 +309,13 @@ contract YTOrderbookFacetTest is Test {
         vm.startPrank(maker);
         quoteToken.approve(address(diamond), 10e18);
 
-        uint256 orderId = orderbook().placeBuyOrder(
-            poolId,
-            100e18, // want 100 YT
-            3e16, // pricePerYt = 0.03 quote per YT
-            0 // default TTL
-        );
+        uint256 orderId = orderbook()
+            .placeBuyOrder(
+                poolId,
+                100e18, // want 100 YT
+                3e16, // pricePerYt = 0.03 quote per YT
+                0 // default TTL
+            );
         vm.stopPrank();
 
         assertEq(orderId, 1);
@@ -432,12 +411,7 @@ contract YTOrderbookFacetTest is Test {
 
         vm.startPrank(maker);
         IERC20(ytToken).approve(address(diamond), 100e18);
-        uint256 orderId = orderbook().placeSellOrder(
-            poolId,
-            100e18,
-            200,
-            1 days
-        );
+        uint256 orderId = orderbook().placeSellOrder(poolId, 100e18, 200, 1 days);
         vm.stopPrank();
 
         // Fast forward past expiry
@@ -445,12 +419,7 @@ contract YTOrderbookFacetTest is Test {
 
         vm.startPrank(taker);
         quoteToken.approve(address(diamond), 10e18);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.OrderExpired.selector,
-                orderId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.OrderExpired.selector, orderId));
         orderbook().fillSellOrder(orderId, 100e18);
         vm.stopPrank();
     }
@@ -466,13 +435,7 @@ contract YTOrderbookFacetTest is Test {
 
         vm.startPrank(taker);
         quoteToken.approve(address(diamond), 20e18);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.FillExceedsRemaining.selector,
-                101e18,
-                100e18
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.FillExceedsRemaining.selector, 101e18, 100e18));
         orderbook().fillSellOrder(orderId, 101e18);
         vm.stopPrank();
     }
@@ -499,10 +462,7 @@ contract YTOrderbookFacetTest is Test {
         // Taker fee = 10e18 * 30 / 10000 = 0.03e18
         uint256 expectedFee = (10e18 * 30) / 10_000;
         assertEq(quoteToken.balanceOf(treasury) - treasuryBefore, expectedFee);
-        assertEq(
-            quoteToken.balanceOf(maker) - makerQuoteBefore,
-            10e18 - expectedFee
-        );
+        assertEq(quoteToken.balanceOf(maker) - makerQuoteBefore, 10e18 - expectedFee);
     }
 
     // ================================================================
@@ -574,10 +534,7 @@ contract YTOrderbookFacetTest is Test {
         // Used: 50e18 * 5e16 / 1e18 = 2.5e18
         uint256 originalEscrow = 5e18;
         uint256 usedEscrow = 25e17; // 2.5e18
-        assertEq(
-            orderbook().getOrderEscrow(orderId),
-            originalEscrow - usedEscrow
-        );
+        assertEq(orderbook().getOrderEscrow(orderId), originalEscrow - usedEscrow);
     }
 
     // ================================================================
@@ -629,13 +586,7 @@ contract YTOrderbookFacetTest is Test {
         vm.stopPrank();
 
         vm.prank(taker);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.NotOrderMaker.selector,
-                orderId,
-                taker
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.NotOrderMaker.selector, orderId, taker));
         orderbook().cancelOrder(orderId);
     }
 
@@ -649,12 +600,7 @@ contract YTOrderbookFacetTest is Test {
         orderbook().cancelOrder(orderId);
 
         // Try to cancel again
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.OrderNotActive.selector,
-                orderId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.OrderNotActive.selector, orderId));
         orderbook().cancelOrder(orderId);
         vm.stopPrank();
     }
@@ -679,8 +625,7 @@ contract YTOrderbookFacetTest is Test {
         orderbook().cancelOrder(2);
         vm.stopPrank();
 
-        YTOrderbookFacet.Order[] memory activeOrders = orderbook()
-            .getActiveOrders(poolId);
+        YTOrderbookFacet.Order[] memory activeOrders = orderbook().getActiveOrders(poolId);
         assertEq(activeOrders.length, 2);
         assertEq(activeOrders[0].id, 1);
         assertEq(activeOrders[1].id, 3);
@@ -700,8 +645,7 @@ contract YTOrderbookFacetTest is Test {
         // Fast forward past first order's expiry
         vm.warp(block.timestamp + 2 hours);
 
-        YTOrderbookFacet.Order[] memory activeOrders = orderbook()
-            .getActiveOrders(poolId);
+        YTOrderbookFacet.Order[] memory activeOrders = orderbook().getActiveOrders(poolId);
         assertEq(activeOrders.length, 1);
         assertEq(activeOrders[0].id, 2);
     }
@@ -780,12 +724,7 @@ contract YTOrderbookFacetTest is Test {
         uint256 orderId = orderbook().placeSellOrder(poolId, 100e18, 200, 0);
 
         quoteToken.approve(address(diamond), 10e18);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.CannotFillOwnOrder.selector,
-                orderId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.CannotFillOwnOrder.selector, orderId));
         orderbook().fillSellOrder(orderId, 50e18);
         vm.stopPrank();
     }
@@ -799,12 +738,7 @@ contract YTOrderbookFacetTest is Test {
         uint256 orderId = orderbook().placeBuyOrder(poolId, 100e18, 300, 0);
 
         IERC20(ytToken).approve(address(diamond), 100e18);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.CannotFillOwnOrder.selector,
-                orderId
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.CannotFillOwnOrder.selector, orderId));
         orderbook().fillBuyOrder(orderId, 50e18);
         vm.stopPrank();
     }
@@ -841,12 +775,7 @@ contract YTOrderbookFacetTest is Test {
         vm.startPrank(maker);
         IERC20(ytToken).approve(address(diamond), 100e18);
         // Use long TTL so order doesn't expire before maturity
-        uint256 orderId = orderbook().placeSellOrder(
-            poolId,
-            100e18,
-            200,
-            100 days
-        );
+        uint256 orderId = orderbook().placeSellOrder(poolId, 100e18, 200, 100 days);
         vm.stopPrank();
 
         // Fast forward past maturity (90 days default)
@@ -872,12 +801,7 @@ contract YTOrderbookFacetTest is Test {
         vm.startPrank(maker);
         quoteToken.approve(address(diamond), 10e18);
         // Use long TTL so order doesn't expire before maturity
-        uint256 orderId = orderbook().placeBuyOrder(
-            poolId,
-            100e18,
-            300,
-            100 days
-        );
+        uint256 orderId = orderbook().placeBuyOrder(poolId, 100e18, 300, 100 days);
         vm.stopPrank();
 
         // Transfer YT to taker
@@ -889,13 +813,7 @@ contract YTOrderbookFacetTest is Test {
 
         vm.startPrank(taker);
         IERC20(ytToken).approve(address(diamond), 100e18);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YTOrderbookFacet.CycleMatured.selector,
-                poolId,
-                1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YTOrderbookFacet.CycleMatured.selector, poolId, 1));
         orderbook().fillBuyOrder(orderId, 50e18);
         vm.stopPrank();
     }
@@ -907,14 +825,8 @@ contract YTOrderbookFacetTest is Test {
     function test_GetOrderbookSummary_Empty() public {
         _createCycleWithYT();
 
-        (
-            uint256 sellCount,
-            uint256 buyCount,
-            uint256 bestSell,
-            uint256 bestBuy,
-            uint256 sellVol,
-            uint256 buyVol
-        ) = orderbook().getOrderbookSummary(poolId);
+        (uint256 sellCount, uint256 buyCount, uint256 bestSell, uint256 bestBuy, uint256 sellVol, uint256 buyVol) =
+            orderbook().getOrderbookSummary(poolId);
 
         assertEq(sellCount, 0);
         assertEq(buyCount, 0);
@@ -941,14 +853,8 @@ contract YTOrderbookFacetTest is Test {
         orderbook().placeBuyOrder(poolId, 60e18, 100, 0); // 1% - best bid
         vm.stopPrank();
 
-        (
-            uint256 sellCount,
-            uint256 buyCount,
-            uint256 bestSell,
-            uint256 bestBuy,
-            uint256 sellVol,
-            uint256 buyVol
-        ) = orderbook().getOrderbookSummary(poolId);
+        (uint256 sellCount, uint256 buyCount, uint256 bestSell, uint256 bestBuy, uint256 sellVol, uint256 buyVol) =
+            orderbook().getOrderbookSummary(poolId);
 
         assertEq(sellCount, 2);
         assertEq(buyCount, 2);
@@ -974,14 +880,7 @@ contract YTOrderbookFacetTest is Test {
         // Fast forward past first order's expiry
         vm.warp(block.timestamp + 2 hours);
 
-        (
-            uint256 sellCount,
-            ,
-            uint256 bestSell,
-            ,
-            uint256 sellVol,
-
-        ) = orderbook().getOrderbookSummary(poolId);
+        (uint256 sellCount,, uint256 bestSell,, uint256 sellVol,) = orderbook().getOrderbookSummary(poolId);
 
         assertEq(sellCount, 1);
         assertEq(bestSell, 300);
@@ -1012,9 +911,7 @@ contract MockOrderbookAdapter is ILiquidityAdapter {
         diamond = _diamond;
     }
 
-    function addLiquidity(
-        bytes calldata
-    )
+    function addLiquidity(bytes calldata)
         external
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
@@ -1028,41 +925,27 @@ contract MockOrderbookAdapter is ILiquidityAdapter {
         IERC20(token1).transferFrom(msg.sender, address(this), amount1Used);
     }
 
-    function removeLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function removeLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function collectYield(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function collectYield(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTokens(
-        bytes calldata
-    ) external view override returns (address, address) {
+    function getPoolTokens(bytes calldata) external view override returns (address, address) {
         return (token0, token1);
     }
 
-    function supportsPool(
-        bytes calldata
-    ) external pure override returns (bool) {
+    function supportsPool(bytes calldata) external pure override returns (bool) {
         return true;
     }
 
-    function previewRemoveLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function previewRemoveLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPositionLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128) {
+    function getPositionLiquidity(bytes calldata) external pure override returns (uint128) {
         return 0;
     }
 
@@ -1074,47 +957,31 @@ contract MockOrderbookAdapter is ILiquidityAdapter {
         return address(this);
     }
 
-    function previewAddLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
-    function calculateOptimalAmount1(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount1(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function calculateOptimalAmount0(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount0(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function getPoolPrice(
-        bytes calldata
-    ) external pure override returns (uint160, int24) {
+    function getPoolPrice(bytes calldata) external pure override returns (uint160, int24) {
         return (0, 0);
     }
 
-    function getPoolFee(
-        bytes calldata
-    ) external pure override returns (uint24) {
+    function getPoolFee(bytes calldata) external pure override returns (uint24) {
         return 0;
     }
 
-    function getPositionValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPositionValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTotalValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPoolTotalValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 }

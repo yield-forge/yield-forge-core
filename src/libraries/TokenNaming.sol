@@ -63,13 +63,9 @@ library TokenNaming {
      *   hash = keccak256(poolId) = 0xA3F2E9...
      *   result = "A3F2E9"
      */
-    function poolIdToShortHash(
-        bytes32 poolId
-    ) internal pure returns (string memory) {
+    function poolIdToShortHash(bytes32 poolId) internal pure returns (string memory) {
         // Hash the poolId to get a random distribution
-        bytes memory hashBytes = abi.encodePacked(
-            keccak256(abi.encodePacked(poolId))
-        );
+        bytes memory hashBytes = abi.encodePacked(keccak256(abi.encodePacked(poolId)));
 
         // Prepare result array for 6 characters
         bytes memory result = new bytes(6);
@@ -104,9 +100,7 @@ library TokenNaming {
      *   start = Jan 15, 2025 12:00 UTC
      *   maturity = Apr 15, 2025 23:59:59 UTC
      */
-    function calculateMaturity(
-        uint256 startTimestamp
-    ) internal pure returns (uint256) {
+    function calculateMaturity(uint256 startTimestamp) internal pure returns (uint256) {
         // Add 90 days to start timestamp
         uint256 maturityTimestamp = startTimestamp + 90 days;
 
@@ -136,38 +130,23 @@ library TokenNaming {
      *   timestamp for Jun 15, 2025 → "15JUN2025"
      *   timestamp for Jan 1, 2026 → "01JAN2026"
      */
-    function formatMaturityDate(
-        uint256 timestamp
-    ) internal pure returns (string memory) {
+    function formatMaturityDate(uint256 timestamp) internal pure returns (string memory) {
         uint256 year = getYear(timestamp);
         uint256 month = getMonth(timestamp);
         uint256 day = getDay(timestamp);
 
         // Month abbreviations (3 letters, uppercase)
-        string[12] memory monthNames = [
-            "JAN",
-            "FEB",
-            "MAR",
-            "APR",
-            "MAY",
-            "JUN",
-            "JUL",
-            "AUG",
-            "SEP",
-            "OCT",
-            "NOV",
-            "DEC"
-        ];
+        string[12] memory monthNames =
+            ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
         // Combine: DD + MMM + YYYY
-        return
-            string(
-                abi.encodePacked(
-                    padDay(day), // "01" to "31"
-                    monthNames[month - 1], // "JAN" to "DEC"
-                    uint2str(year) // "2025"
-                )
-            );
+        return string(
+            abi.encodePacked(
+                padDay(day), // "01" to "31"
+                monthNames[month - 1], // "JAN" to "DEC"
+                uint2str(year) // "2025"
+            )
+        );
     }
 
     /**
@@ -277,10 +256,7 @@ library TokenNaming {
      * @param month The month (1-12)
      * @return Last day of month (28, 29, 30, or 31)
      */
-    function getLastDayOfMonth(
-        uint256 year,
-        uint256 month
-    ) internal pure returns (uint256) {
+    function getLastDayOfMonth(uint256 year, uint256 month) internal pure returns (uint256) {
         // February special case
         if (month == 2) {
             return isLeapYear(year) ? 29 : 28;
@@ -304,11 +280,7 @@ library TokenNaming {
      * @param day Day (1-31)
      * @return Unix timestamp
      */
-    function toTimestamp(
-        uint256 year,
-        uint256 month,
-        uint256 day
-    ) internal pure returns (uint256) {
+    function toTimestamp(uint256 year, uint256 month, uint256 day) internal pure returns (uint256) {
         // Calculate days from year
         uint256 timestamp = yearToDays(year) * 86400;
 

@@ -4,9 +4,7 @@ pragma solidity ^0.8.26;
 import {LibAppStorage} from "../libraries/LibAppStorage.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
-import {
-    IERC20Metadata
-} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title PoolRegistryFacet
@@ -83,10 +81,7 @@ contract PoolRegistryFacet {
     event AdapterStatusChanged(address indexed adapter, bool approved);
 
     /// @notice Emitted when pool guardian is set
-    event PoolGuardianSet(
-        address indexed oldGuardian,
-        address indexed newGuardian
-    );
+    event PoolGuardianSet(address indexed oldGuardian, address indexed newGuardian);
 
     /// @notice Emitted when a pool is banned
     event PoolBanned(bytes32 indexed poolId, address indexed guardian);
@@ -95,20 +90,13 @@ contract PoolRegistryFacet {
     event PoolUnbanned(bytes32 indexed poolId, address indexed guardian);
 
     /// @notice Emitted when protocol fee recipient is updated
-    event FeeRecipientSet(
-        address indexed oldRecipient,
-        address indexed newRecipient
-    );
+    event FeeRecipientSet(address indexed oldRecipient, address indexed newRecipient);
 
     /// @notice Emitted when a quote token is approved or revoked
     event QuoteTokenStatusChanged(address indexed token, bool approved);
 
     /// @notice Emitted when a pool's quote token is changed
-    event PoolQuoteTokenChanged(
-        bytes32 indexed poolId,
-        address indexed oldQuoteToken,
-        address indexed newQuoteToken
-    );
+    event PoolQuoteTokenChanged(bytes32 indexed poolId, address indexed oldQuoteToken, address indexed newQuoteToken);
 
     // Note: ProtocolFeeSet event removed.
     // Fees are now constants in ProtocolFees.sol library.
@@ -190,10 +178,7 @@ contract PoolRegistryFacet {
     /// @notice Restrict to pool guardian or owner
     modifier onlyPoolGuardian() {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
-        if (
-            msg.sender != s.poolGuardian &&
-            msg.sender != LibDiamond.contractOwner()
-        ) {
+        if (msg.sender != s.poolGuardian && msg.sender != LibDiamond.contractOwner()) {
             revert NotPoolGuardian();
         }
         _;
@@ -404,11 +389,11 @@ contract PoolRegistryFacet {
      *       USDT
      *   );
      */
-    function registerPool(
-        address adapter,
-        bytes calldata poolParams,
-        address quoteToken
-    ) external whenInitialized returns (bytes32 poolId) {
+    function registerPool(address adapter, bytes calldata poolParams, address quoteToken)
+        external
+        whenInitialized
+        returns (bytes32 poolId)
+    {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
 
         // Verify adapter is approved
@@ -431,9 +416,7 @@ contract PoolRegistryFacet {
         }
 
         // Get token addresses from adapter
-        (address token0, address token1) = adapterContract.getPoolTokens(
-            poolParams
-        );
+        (address token0, address token1) = adapterContract.getPoolTokens(poolParams);
 
         // Validate quoteToken is one of the pool's tokens
         if (quoteToken != token0 && quoteToken != token1) {
@@ -464,14 +447,7 @@ contract PoolRegistryFacet {
         // externalPoolId = keccak256(poolParams) - matches Uniswap V4 PoolId format
         // Used for external links (e.g., Uniswap explore page)
         bytes32 externalPoolId = keccak256(poolParams);
-        emit PoolRegistered(
-            poolId,
-            adapter,
-            token0,
-            token1,
-            quoteToken,
-            externalPoolId
-        );
+        emit PoolRegistered(poolId, adapter, token0, token1, quoteToken, externalPoolId);
     }
 
     // ============================================================
@@ -577,10 +553,7 @@ contract PoolRegistryFacet {
      * @param poolId Pool identifier
      * @param newQuoteToken New quote token address
      */
-    function setPoolQuoteToken(
-        bytes32 poolId,
-        address newQuoteToken
-    ) external onlyOwner {
+    function setPoolQuoteToken(bytes32 poolId, address newQuoteToken) external onlyOwner {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         LibAppStorage.PoolInfo storage pool = s.pools[poolId];
 
@@ -646,9 +619,7 @@ contract PoolRegistryFacet {
      * @param poolId Pool identifier
      * @return info Pool information struct
      */
-    function getPoolInfo(
-        bytes32 poolId
-    ) external view returns (LibAppStorage.PoolInfo memory info) {
+    function getPoolInfo(bytes32 poolId) external view returns (LibAppStorage.PoolInfo memory info) {
         return LibAppStorage.diamondStorage().pools[poolId];
     }
 
@@ -678,10 +649,7 @@ contract PoolRegistryFacet {
      * @param cycleId Cycle number
      * @return info Cycle information struct
      */
-    function getCycleInfo(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external view returns (LibAppStorage.CycleInfo memory info) {
+    function getCycleInfo(bytes32 poolId, uint256 cycleId) external view returns (LibAppStorage.CycleInfo memory info) {
         return LibAppStorage.diamondStorage().cycles[poolId][cycleId];
     }
 
@@ -713,12 +681,8 @@ contract PoolRegistryFacet {
      * @return token0 First token
      * @return token1 Second token
      */
-    function getPoolTokens(
-        bytes32 poolId
-    ) external view returns (address token0, address token1) {
-        LibAppStorage.PoolInfo storage pool = LibAppStorage
-            .diamondStorage()
-            .pools[poolId];
+    function getPoolTokens(bytes32 poolId) external view returns (address token0, address token1) {
+        LibAppStorage.PoolInfo storage pool = LibAppStorage.diamondStorage().pools[poolId];
         return (pool.token0, pool.token1);
     }
 

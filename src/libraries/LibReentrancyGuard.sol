@@ -8,8 +8,7 @@ pragma solidity ^0.8.26;
  */
 library LibReentrancyGuard {
     /// @notice Storage position for reentrancy guard
-    bytes32 constant REENTRANCY_GUARD_STORAGE_POSITION =
-        keccak256("yieldforge.reentrancy.guard.storage");
+    bytes32 constant REENTRANCY_GUARD_STORAGE_POSITION = keccak256("yieldforge.reentrancy.guard.storage");
 
     uint256 private constant NOT_ENTERED = 1;
     uint256 private constant ENTERED = 2;
@@ -20,11 +19,7 @@ library LibReentrancyGuard {
 
     error ReentrancyGuardReentrantCall();
 
-    function reentrancyStorage()
-        internal
-        pure
-        returns (ReentrancyStorage storage rs)
-    {
+    function reentrancyStorage() internal pure returns (ReentrancyStorage storage rs) {
         bytes32 position = REENTRANCY_GUARD_STORAGE_POSITION;
         assembly {
             rs.slot := position

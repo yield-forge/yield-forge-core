@@ -15,9 +15,7 @@ interface IPoolFactory {
         bool exists;
     }
 
-    function getPoolInfo(
-        bytes32 poolId
-    ) external view returns (PoolInfo memory);
+    function getPoolInfo(bytes32 poolId) external view returns (PoolInfo memory);
 }
 
 /**
@@ -126,11 +124,7 @@ abstract contract TokenBase is ERC20 {
      * @notice Get pool information from Diamond
      * @return Pool details (token0, token1, fee, tickSpacing, exists)
      */
-    function getPoolInfo()
-        external
-        view
-        returns (IPoolFactory.PoolInfo memory)
-    {
+    function getPoolInfo() external view returns (IPoolFactory.PoolInfo memory) {
         return IPoolFactory(diamond).getPoolInfo(poolId);
     }
 
@@ -139,14 +133,8 @@ abstract contract TokenBase is ERC20 {
      * @return token0 First token address
      * @return token1 Second token address
      */
-    function getUnderlyingTokens()
-        external
-        view
-        returns (address token0, address token1)
-    {
-        IPoolFactory.PoolInfo memory info = IPoolFactory(diamond).getPoolInfo(
-            poolId
-        );
+    function getUnderlyingTokens() external view returns (address token0, address token1) {
+        IPoolFactory.PoolInfo memory info = IPoolFactory(diamond).getPoolInfo(poolId);
         return (info.token0, info.token1);
     }
 

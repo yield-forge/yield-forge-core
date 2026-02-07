@@ -32,8 +32,7 @@ pragma solidity ^0.8.26;
 library LibAppStorage {
     /// @notice Storage position for Diamond Storage pattern
     /// @dev Computed as keccak256("yieldforge.app.storage")
-    bytes32 constant DIAMOND_STORAGE_POSITION =
-        keccak256("yieldforge.app.storage");
+    bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("yieldforge.app.storage");
 
     // ============================================================
     //                     STRUCT DEFINITIONS

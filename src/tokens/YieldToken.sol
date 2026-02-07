@@ -56,16 +56,11 @@ contract YieldToken is TokenBase {
      * - On transfer: sync checkpoint for recipient (prevents claiming old yield)
      * - On burn (to == address(0)): REVERT if user has unclaimed yield
      */
-    function _update(
-        address from,
-        address to,
-        uint256 amount
-    ) internal override {
+    function _update(address from, address to, uint256 amount) internal override {
         // Block burn if user has unclaimed yield
         if (to == address(0) && from != address(0)) {
             // Check if there's pending yield for this user
-            (uint256 pending0, uint256 pending1) = IYieldAccumulator(diamond)
-                .getPendingYield(poolId, cycleId, from);
+            (uint256 pending0, uint256 pending1) = IYieldAccumulator(diamond).getPendingYield(poolId, cycleId, from);
 
             if (pending0 > 0 || pending1 > 0) {
                 revert UnclaimedYieldExists(pending0, pending1);
@@ -86,20 +81,12 @@ contract YieldToken is TokenBase {
  * @notice Interface for YieldAccumulatorFacet
  */
 interface IYieldAccumulator {
-    function syncCheckpoint(
-        bytes32 poolId,
-        uint256 cycleId,
-        address user
-    ) external;
+    function syncCheckpoint(bytes32 poolId, uint256 cycleId, address user) external;
 
-    function claimYield(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external returns (uint256 amount0, uint256 amount1);
+    function claimYield(bytes32 poolId, uint256 cycleId) external returns (uint256 amount0, uint256 amount1);
 
-    function getPendingYield(
-        bytes32 poolId,
-        uint256 cycleId,
-        address user
-    ) external view returns (uint256 pending0, uint256 pending1);
+    function getPendingYield(bytes32 poolId, uint256 cycleId, address user)
+        external
+        view
+        returns (uint256 pending0, uint256 pending1);
 }

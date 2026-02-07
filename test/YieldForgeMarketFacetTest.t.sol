@@ -60,11 +60,7 @@ contract YieldForgeMarketFacetTest is Test {
         yieldAccumulatorFacet = new YieldAccumulatorFacet();
 
         // Deploy mock adapter
-        mockAdapter = new MockMarketAdapter(
-            address(quoteToken),
-            address(token1),
-            address(diamond)
-        );
+        mockAdapter = new MockMarketAdapter(address(quoteToken), address(token1), address(diamond));
 
         // Add facets to Diamond
         _addFacets();
@@ -124,17 +120,11 @@ contract YieldForgeMarketFacetTest is Test {
 
         // YieldForgeMarketFacet
         bytes4[] memory marketSelectors = new bytes4[](8);
-        marketSelectors[0] = YieldForgeMarketFacet
-            .addYieldForgeLiquidity
-            .selector;
-        marketSelectors[1] = YieldForgeMarketFacet
-            .removeYieldForgeLiquidity
-            .selector;
+        marketSelectors[0] = YieldForgeMarketFacet.addYieldForgeLiquidity.selector;
+        marketSelectors[1] = YieldForgeMarketFacet.removeYieldForgeLiquidity.selector;
         marketSelectors[2] = YieldForgeMarketFacet.swapExactQuoteForPT.selector;
         marketSelectors[3] = YieldForgeMarketFacet.swapExactPTForQuote.selector;
-        marketSelectors[4] = YieldForgeMarketFacet
-            .getYieldForgeMarketInfo
-            .selector;
+        marketSelectors[4] = YieldForgeMarketFacet.getYieldForgeMarketInfo.selector;
         marketSelectors[5] = YieldForgeMarketFacet.getUserLpBalance.selector;
         marketSelectors[6] = YieldForgeMarketFacet.getPtPrice.selector;
         marketSelectors[7] = YieldForgeMarketFacet.getCurrentSwapFee.selector;
@@ -161,20 +151,12 @@ contract YieldForgeMarketFacetTest is Test {
         PoolRegistryFacet(address(diamond)).initialize(treasury);
 
         // Approve adapter and quote token
-        PoolRegistryFacet(address(diamond)).approveAdapter(
-            address(mockAdapter)
-        );
-        PoolRegistryFacet(address(diamond)).approveQuoteToken(
-            address(quoteToken)
-        );
+        PoolRegistryFacet(address(diamond)).approveAdapter(address(mockAdapter));
+        PoolRegistryFacet(address(diamond)).approveQuoteToken(address(quoteToken));
 
         // Register pool
         bytes memory poolParams = abi.encode(address(0xB001));
-        poolId = PoolRegistryFacet(address(diamond)).registerPool(
-            address(mockAdapter),
-            poolParams,
-            address(quoteToken)
-        );
+        poolId = PoolRegistryFacet(address(diamond)).registerPool(address(mockAdapter), poolParams, address(quoteToken));
 
         // Mint tokens to users
         quoteToken.mint(user, 10000e18);
@@ -238,20 +220,12 @@ contract YieldForgeMarketFacetTest is Test {
         vm.startPrank(user);
         IERC20(ptToken).approve(address(diamond), ptBalance);
 
-        uint256 lpTokens = market().addYieldForgeLiquidity(
-            poolId,
-            ptBalance,
-            500
-        ); // 5% discount
+        uint256 lpTokens = market().addYieldForgeLiquidity(poolId, ptBalance, 500); // 5% discount
         vm.stopPrank();
 
         // Market should be active
-        (LibAppStorage.YieldForgeMarketStatus status, , , , , , ) = market()
-            .getYieldForgeMarketInfo(poolId);
-        assertEq(
-            uint(status),
-            uint(LibAppStorage.YieldForgeMarketStatus.ACTIVE)
-        );
+        (LibAppStorage.YieldForgeMarketStatus status,,,,,,) = market().getYieldForgeMarketInfo(poolId);
+        assertEq(uint256(status), uint256(LibAppStorage.YieldForgeMarketStatus.ACTIVE));
         assertGt(lpTokens, 0);
     }
 
@@ -272,21 +246,11 @@ contract YieldForgeMarketFacetTest is Test {
         IERC20(ptToken).approve(address(diamond), 100e18);
 
         // Discount = 0 is invalid
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YieldForgeMarketFacet.InvalidDiscount.selector,
-                0
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YieldForgeMarketFacet.InvalidDiscount.selector, 0));
         market().addYieldForgeLiquidity(poolId, 100e18, 0);
 
         // Discount >= 10000 is invalid (100%)
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                YieldForgeMarketFacet.InvalidDiscount.selector,
-                10000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(YieldForgeMarketFacet.InvalidDiscount.selector, 10000));
         market().addYieldForgeLiquidity(poolId, 100e18, 10000);
         vm.stopPrank();
     }
@@ -299,19 +263,12 @@ contract YieldForgeMarketFacetTest is Test {
         uint256 ptBefore = IERC20(ptToken).balanceOf(user);
 
         vm.prank(user);
-        (uint256 ptReturned, ) = market().removeYieldForgeLiquidity(
-            poolId,
-            lpBalance / 2
-        );
+        (uint256 ptReturned,) = market().removeYieldForgeLiquidity(poolId, lpBalance / 2);
 
         assertGt(ptReturned, 0);
         assertEq(IERC20(ptToken).balanceOf(user), ptBefore + ptReturned);
         // Allow 1 wei rounding difference
-        assertApproxEqAbs(
-            market().getUserLpBalance(poolId, user),
-            lpBalance / 2,
-            1
-        );
+        assertApproxEqAbs(market().getUserLpBalance(poolId, user), lpBalance / 2, 1);
     }
 
     // ================================================================
@@ -426,9 +383,7 @@ contract MockMarketAdapter is ILiquidityAdapter {
         diamond = _diamond;
     }
 
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
@@ -452,41 +407,27 @@ contract MockMarketAdapter is ILiquidityAdapter {
         return (liquidity, amount0Used, amount1Used);
     }
 
-    function removeLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function removeLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function collectYield(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function collectYield(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTokens(
-        bytes calldata
-    ) external view override returns (address, address) {
+    function getPoolTokens(bytes calldata) external view override returns (address, address) {
         return (token0, token1);
     }
 
-    function supportsPool(
-        bytes calldata
-    ) external pure override returns (bool) {
+    function supportsPool(bytes calldata) external pure override returns (bool) {
         return true;
     }
 
-    function previewRemoveLiquidity(
-        uint128,
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function previewRemoveLiquidity(uint128, bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPositionLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128) {
+    function getPositionLiquidity(bytes calldata) external pure override returns (uint128) {
         return 0;
     }
 
@@ -499,47 +440,31 @@ contract MockMarketAdapter is ILiquidityAdapter {
     }
 
     // New interface stubs
-    function previewAddLiquidity(
-        bytes calldata
-    ) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
-    function calculateOptimalAmount1(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount1(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function calculateOptimalAmount0(
-        uint256,
-        bytes calldata
-    ) external pure override returns (uint256) {
+    function calculateOptimalAmount0(uint256, bytes calldata) external pure override returns (uint256) {
         return 0;
     }
 
-    function getPoolPrice(
-        bytes calldata
-    ) external pure override returns (uint160, int24) {
+    function getPoolPrice(bytes calldata) external pure override returns (uint160, int24) {
         return (0, 0);
     }
 
-    function getPoolFee(
-        bytes calldata
-    ) external pure override returns (uint24) {
+    function getPoolFee(bytes calldata) external pure override returns (uint24) {
         return 0;
     }
 
-    function getPositionValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPositionValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 
-    function getPoolTotalValue(
-        bytes calldata
-    ) external pure override returns (uint256, uint256) {
+    function getPoolTotalValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
 }

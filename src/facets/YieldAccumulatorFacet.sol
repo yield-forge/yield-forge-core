@@ -8,9 +8,7 @@ import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
 import {ProtocolFees} from "../libraries/ProtocolFees.sol";
 import {YieldToken} from "../tokens/YieldToken.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title YieldAccumulatorFacet
@@ -115,11 +113,7 @@ contract YieldAccumulatorFacet {
      * @param amount1 Token1 claimed
      */
     event YieldClaimed(
-        bytes32 indexed poolId,
-        uint256 indexed cycleId,
-        address indexed claimer,
-        uint256 amount0,
-        uint256 amount1
+        bytes32 indexed poolId, uint256 indexed cycleId, address indexed claimer, uint256 amount0, uint256 amount1
     );
 
     /**
@@ -128,11 +122,7 @@ contract YieldAccumulatorFacet {
      * @param cycleId Cycle
      * @param user User whose checkpoint was synced
      */
-    event CheckpointSynced(
-        bytes32 indexed poolId,
-        uint256 indexed cycleId,
-        address indexed user
-    );
+    event CheckpointSynced(bytes32 indexed poolId, uint256 indexed cycleId, address indexed user);
 
     /**
      * @notice Emitted when protocol fees are withdrawn
@@ -143,11 +133,7 @@ contract YieldAccumulatorFacet {
      * @param amount1 Token1 withdrawn
      */
     event ProtocolFeesWithdrawn(
-        bytes32 indexed poolId,
-        uint256 indexed cycleId,
-        address indexed recipient,
-        uint256 amount0,
-        uint256 amount1
+        bytes32 indexed poolId, uint256 indexed cycleId, address indexed recipient, uint256 amount0, uint256 amount1
     );
 
     // ============================================================
@@ -194,9 +180,7 @@ contract YieldAccumulatorFacet {
      *   // Anyone can harvest
      *   (uint256 y0, uint256 y1) = yieldAccumulator.harvestYield(poolId);
      */
-    function harvestYield(
-        bytes32 poolId
-    ) external returns (uint256 yield0, uint256 yield1) {
+    function harvestYield(bytes32 poolId) external returns (uint256 yield0, uint256 yield1) {
         // ===== SECURITY CHECKS =====
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
@@ -214,9 +198,7 @@ contract YieldAccumulatorFacet {
         }
 
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[
-            poolId
-        ][cycleId];
+        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[poolId][cycleId];
 
         // ===== COLLECT YIELD FROM ADAPTER =====
 
@@ -246,12 +228,8 @@ contract YieldAccumulatorFacet {
 
         if (totalYTSupply > 0) {
             // Distribute to YT holders proportionally
-            yieldState.yieldPerShare0 +=
-                (userYield0 * PRECISION) /
-                totalYTSupply;
-            yieldState.yieldPerShare1 +=
-                (userYield1 * PRECISION) /
-                totalYTSupply;
+            yieldState.yieldPerShare0 += (userYield0 * PRECISION) / totalYTSupply;
+            yieldState.yieldPerShare1 += (userYield1 * PRECISION) / totalYTSupply;
         }
 
         // ===== UPDATE STATE =====
@@ -263,15 +241,7 @@ contract YieldAccumulatorFacet {
         yieldState.protocolFee1 += protocolFee1;
         yieldState.lastHarvestTime = block.timestamp;
 
-        emit YieldHarvested(
-            poolId,
-            cycleId,
-            msg.sender,
-            yield0,
-            yield1,
-            protocolFee0,
-            protocolFee1
-        );
+        emit YieldHarvested(poolId, cycleId, msg.sender, yield0, yield1, protocolFee0, protocolFee1);
 
         // ===== REENTRANCY GUARD EXIT =====
         LibReentrancyGuard._nonReentrantAfter();
@@ -302,10 +272,7 @@ contract YieldAccumulatorFacet {
      *       1
      *   );
      */
-    function claimYield(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external returns (uint256 amount0, uint256 amount1) {
+    function claimYield(bytes32 poolId, uint256 cycleId) external returns (uint256 amount0, uint256 amount1) {
         // ===== SECURITY CHECKS =====
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -323,11 +290,7 @@ contract YieldAccumulatorFacet {
 
         // ===== CALCULATE PENDING YIELD =====
 
-        (amount0, amount1) = _calculatePendingYield(
-            poolId,
-            cycleId,
-            msg.sender
-        );
+        (amount0, amount1) = _calculatePendingYield(poolId, cycleId, msg.sender);
 
         if (amount0 == 0 && amount1 == 0) {
             revert NoYieldToClaim();
@@ -335,11 +298,8 @@ contract YieldAccumulatorFacet {
 
         // ===== UPDATE CHECKPOINT =====
 
-        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[
-            poolId
-        ][cycleId];
-        LibAppStorage.UserYieldCheckpoint storage checkpoint = s
-            .userYieldCheckpoints[poolId][cycleId][msg.sender];
+        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[poolId][cycleId];
+        LibAppStorage.UserYieldCheckpoint storage checkpoint = s.userYieldCheckpoints[poolId][cycleId][msg.sender];
 
         checkpoint.lastClaimedPerShare0 = yieldState.yieldPerShare0;
         checkpoint.lastClaimedPerShare1 = yieldState.yieldPerShare1;
@@ -371,11 +331,7 @@ contract YieldAccumulatorFacet {
      * @param cycleId Cycle
      * @param user User address to sync
      */
-    function syncCheckpoint(
-        bytes32 poolId,
-        uint256 cycleId,
-        address user
-    ) external {
+    function syncCheckpoint(bytes32 poolId, uint256 cycleId, address user) external {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
 
         // Verify cycle exists first (H-02 fix)
@@ -390,11 +346,8 @@ contract YieldAccumulatorFacet {
             revert OnlyYTToken();
         }
 
-        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[
-            poolId
-        ][cycleId];
-        LibAppStorage.UserYieldCheckpoint storage checkpoint = s
-            .userYieldCheckpoints[poolId][cycleId][user];
+        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[poolId][cycleId];
+        LibAppStorage.UserYieldCheckpoint storage checkpoint = s.userYieldCheckpoints[poolId][cycleId][user];
 
         // Set checkpoint to current yieldPerShare
         checkpoint.lastClaimedPerShare0 = yieldState.yieldPerShare0;
@@ -416,10 +369,7 @@ contract YieldAccumulatorFacet {
      * @return amount0 Token0 fees withdrawn
      * @return amount1 Token1 fees withdrawn
      */
-    function withdrawProtocolFees(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external returns (uint256 amount0, uint256 amount1) {
+    function withdrawProtocolFees(bytes32 poolId, uint256 cycleId) external returns (uint256 amount0, uint256 amount1) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
 
         // Only fee recipient can withdraw
@@ -432,9 +382,7 @@ contract YieldAccumulatorFacet {
             revert PoolDoesNotExist(poolId);
         }
 
-        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[
-            poolId
-        ][cycleId];
+        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[poolId][cycleId];
 
         amount0 = yieldState.protocolFee0;
         amount1 = yieldState.protocolFee1;
@@ -455,13 +403,7 @@ contract YieldAccumulatorFacet {
             IERC20(pool.token1).safeTransfer(msg.sender, amount1);
         }
 
-        emit ProtocolFeesWithdrawn(
-            poolId,
-            cycleId,
-            msg.sender,
-            amount0,
-            amount1
-        );
+        emit ProtocolFeesWithdrawn(poolId, cycleId, msg.sender, amount0, amount1);
     }
 
     // ============================================================
@@ -481,19 +423,16 @@ contract YieldAccumulatorFacet {
      * @return pending0 Pending token0 yield
      * @return pending1 Pending token1 yield
      */
-    function _calculatePendingYield(
-        bytes32 poolId,
-        uint256 cycleId,
-        address user
-    ) internal view returns (uint256 pending0, uint256 pending1) {
+    function _calculatePendingYield(bytes32 poolId, uint256 cycleId, address user)
+        internal
+        view
+        returns (uint256 pending0, uint256 pending1)
+    {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
 
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[
-            poolId
-        ][cycleId];
-        LibAppStorage.UserYieldCheckpoint storage checkpoint = s
-            .userYieldCheckpoints[poolId][cycleId][user];
+        LibAppStorage.CycleYieldState storage yieldState = s.cycleYieldStates[poolId][cycleId];
+        LibAppStorage.UserYieldCheckpoint storage checkpoint = s.userYieldCheckpoints[poolId][cycleId][user];
 
         // Get user's YT balance
         YieldToken yt = YieldToken(cycle.ytToken);
@@ -504,10 +443,8 @@ contract YieldAccumulatorFacet {
         }
 
         // Calculate pending for each token
-        uint256 perShareDelta0 = yieldState.yieldPerShare0 -
-            checkpoint.lastClaimedPerShare0;
-        uint256 perShareDelta1 = yieldState.yieldPerShare1 -
-            checkpoint.lastClaimedPerShare1;
+        uint256 perShareDelta0 = yieldState.yieldPerShare0 - checkpoint.lastClaimedPerShare0;
+        uint256 perShareDelta1 = yieldState.yieldPerShare1 - checkpoint.lastClaimedPerShare1;
 
         pending0 = (perShareDelta0 * ytBalance) / PRECISION;
         pending1 = (perShareDelta1 * ytBalance) / PRECISION;
@@ -525,11 +462,11 @@ contract YieldAccumulatorFacet {
      * @return pending0 Pending token0 yield
      * @return pending1 Pending token1 yield
      */
-    function getPendingYield(
-        bytes32 poolId,
-        uint256 cycleId,
-        address user
-    ) external view returns (uint256 pending0, uint256 pending1) {
+    function getPendingYield(bytes32 poolId, uint256 cycleId, address user)
+        external
+        view
+        returns (uint256 pending0, uint256 pending1)
+    {
         return _calculatePendingYield(poolId, cycleId, user);
     }
 
@@ -539,10 +476,11 @@ contract YieldAccumulatorFacet {
      * @param cycleId Cycle
      * @return state Yield state struct
      */
-    function getYieldState(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external view returns (LibAppStorage.CycleYieldState memory state) {
+    function getYieldState(bytes32 poolId, uint256 cycleId)
+        external
+        view
+        returns (LibAppStorage.CycleYieldState memory state)
+    {
         return LibAppStorage.diamondStorage().cycleYieldStates[poolId][cycleId];
     }
 
@@ -553,19 +491,12 @@ contract YieldAccumulatorFacet {
      * @param user User address
      * @return checkpoint User's yield checkpoint
      */
-    function getUserCheckpoint(
-        bytes32 poolId,
-        uint256 cycleId,
-        address user
-    )
+    function getUserCheckpoint(bytes32 poolId, uint256 cycleId, address user)
         external
         view
         returns (LibAppStorage.UserYieldCheckpoint memory checkpoint)
     {
-        return
-            LibAppStorage.diamondStorage().userYieldCheckpoints[poolId][
-                cycleId
-            ][user];
+        return LibAppStorage.diamondStorage().userYieldCheckpoints[poolId][cycleId][user];
     }
 
     /**
@@ -575,13 +506,12 @@ contract YieldAccumulatorFacet {
      * @return total0 Total token0 yield
      * @return total1 Total token1 yield
      */
-    function getTotalYieldAccumulated(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external view returns (uint256 total0, uint256 total1) {
-        LibAppStorage.CycleYieldState storage state = LibAppStorage
-            .diamondStorage()
-            .cycleYieldStates[poolId][cycleId];
+    function getTotalYieldAccumulated(bytes32 poolId, uint256 cycleId)
+        external
+        view
+        returns (uint256 total0, uint256 total1)
+    {
+        LibAppStorage.CycleYieldState storage state = LibAppStorage.diamondStorage().cycleYieldStates[poolId][cycleId];
         return (state.totalYieldAccumulated0, state.totalYieldAccumulated1);
     }
 
@@ -592,13 +522,12 @@ contract YieldAccumulatorFacet {
      * @return fee0 Pending token0 fees
      * @return fee1 Pending token1 fees
      */
-    function getPendingProtocolFees(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external view returns (uint256 fee0, uint256 fee1) {
-        LibAppStorage.CycleYieldState storage state = LibAppStorage
-            .diamondStorage()
-            .cycleYieldStates[poolId][cycleId];
+    function getPendingProtocolFees(bytes32 poolId, uint256 cycleId)
+        external
+        view
+        returns (uint256 fee0, uint256 fee1)
+    {
+        LibAppStorage.CycleYieldState storage state = LibAppStorage.diamondStorage().cycleYieldStates[poolId][cycleId];
         return (state.protocolFee0, state.protocolFee1);
     }
 
@@ -608,15 +537,8 @@ contract YieldAccumulatorFacet {
      * @param cycleId Cycle
      * @return Timestamp of last harvest (0 if never harvested)
      */
-    function getLastHarvestTime(
-        bytes32 poolId,
-        uint256 cycleId
-    ) external view returns (uint256) {
-        return
-            LibAppStorage
-                .diamondStorage()
-                .cycleYieldStates[poolId][cycleId]
-                .lastHarvestTime;
+    function getLastHarvestTime(bytes32 poolId, uint256 cycleId) external view returns (uint256) {
+        return LibAppStorage.diamondStorage().cycleYieldStates[poolId][cycleId].lastHarvestTime;
     }
 
     /**

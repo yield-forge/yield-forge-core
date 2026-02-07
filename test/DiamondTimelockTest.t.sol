@@ -30,11 +30,7 @@ contract DiamondTimelockTest is Test {
     uint256 constant GRACE_PERIOD = 7 days;
 
     // Events
-    event DiamondCutProposed(
-        bytes32 indexed proposalId,
-        uint256 executeAfter,
-        address proposer
-    );
+    event DiamondCutProposed(bytes32 indexed proposalId, uint256 executeAfter, address proposer);
     event DiamondCutExecuted(bytes32 indexed proposalId);
     event DiamondCutCancelled(bytes32 indexed proposalId);
 
@@ -87,11 +83,7 @@ contract DiamondTimelockTest is Test {
 
     function test_SetupDiamondOwnedByTimelock() public view {
         address diamondOwner = OwnershipFacet(address(diamond)).owner();
-        assertEq(
-            diamondOwner,
-            address(timelock),
-            "Diamond should be owned by timelock"
-        );
+        assertEq(diamondOwner, address(timelock), "Diamond should be owned by timelock");
     }
 
     function test_SetupTimelockOwnedByAdmin() public view {
@@ -108,22 +100,11 @@ contract DiamondTimelockTest is Test {
 
         bytes32 proposalId = timelock.proposeDiamondCut(cuts, address(0), "");
 
-        (
-            ,
-            ,
-            uint256 proposedAt,
-            uint256 executeAfter,
-            bool executed,
-            bool cancelled,
-            address proposer
-        ) = timelock.getProposal(proposalId);
+        (,, uint256 proposedAt, uint256 executeAfter, bool executed, bool cancelled, address proposer) =
+            timelock.getProposal(proposalId);
 
         assertEq(proposedAt, block.timestamp, "Proposed at should be now");
-        assertEq(
-            executeAfter,
-            block.timestamp + DELAY,
-            "Execute after should be now + DELAY"
-        );
+        assertEq(executeAfter, block.timestamp + DELAY, "Execute after should be now + DELAY");
         assertFalse(executed, "Should not be executed");
         assertFalse(cancelled, "Should not be cancelled");
         assertEq(proposer, admin, "Proposer should be admin");
@@ -170,17 +151,11 @@ contract DiamondTimelockTest is Test {
         timelock.executeDiamondCut(proposalId);
 
         // Verify facet was added to Diamond
-        address facetAddr = IDiamondLoupe(address(diamond)).facetAddress(
-            MockFacet.getValue.selector
-        );
-        assertEq(
-            facetAddr,
-            address(mockFacet),
-            "MockFacet should be added to Diamond"
-        );
+        address facetAddr = IDiamondLoupe(address(diamond)).facetAddress(MockFacet.getValue.selector);
+        assertEq(facetAddr, address(mockFacet), "MockFacet should be added to Diamond");
 
         // Verify proposal marked as executed
-        (, , , , bool executed, , ) = timelock.getProposal(proposalId);
+        (,,,, bool executed,,) = timelock.getProposal(proposalId);
         assertTrue(executed, "Proposal should be marked executed");
     }
 
@@ -271,7 +246,7 @@ contract DiamondTimelockTest is Test {
 
         timelock.cancelDiamondCut(proposalId);
 
-        (, , , , , bool cancelled, ) = timelock.getProposal(proposalId);
+        (,,,,, bool cancelled,) = timelock.getProposal(proposalId);
         assertTrue(cancelled, "Proposal should be cancelled");
     }
 
@@ -309,10 +284,7 @@ contract DiamondTimelockTest is Test {
 
         bytes32 proposalId = timelock.proposeDiamondCut(cuts, address(0), "");
 
-        assertFalse(
-            timelock.canExecute(proposalId),
-            "Should not be executable before delay"
-        );
+        assertFalse(timelock.canExecute(proposalId), "Should not be executable before delay");
     }
 
     function test_CanExecuteReturnsTrueAfterDelay() public {
@@ -323,10 +295,7 @@ contract DiamondTimelockTest is Test {
 
         vm.warp(block.timestamp + DELAY);
 
-        assertTrue(
-            timelock.canExecute(proposalId),
-            "Should be executable after delay"
-        );
+        assertTrue(timelock.canExecute(proposalId), "Should be executable after delay");
     }
 
     function test_TimeUntilExecution() public {
@@ -357,10 +326,7 @@ contract DiamondTimelockTest is Test {
 
         bytes memory data = abi.encodeWithSelector(Counter.increment.selector);
 
-        bytes32 proposalId = timelock.proposeTransaction(
-            address(counter),
-            data
-        );
+        bytes32 proposalId = timelock.proposeTransaction(address(counter), data);
 
         vm.warp(block.timestamp + DELAY + 1);
 
@@ -371,17 +337,13 @@ contract DiamondTimelockTest is Test {
 
     // ============ Helpers ============
 
-    function _createMockCut(
-        address facetAddress
-    ) internal pure returns (IDiamondCut.FacetCut[] memory) {
+    function _createMockCut(address facetAddress) internal pure returns (IDiamondCut.FacetCut[] memory) {
         bytes4[] memory selectors = new bytes4[](1);
         selectors[0] = MockFacet.getValue.selector;
 
         IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](1);
         cuts[0] = IDiamondCut.FacetCut({
-            facetAddress: facetAddress,
-            action: IDiamondCut.FacetCutAction.Add,
-            functionSelectors: selectors
+            facetAddress: facetAddress, action: IDiamondCut.FacetCutAction.Add, functionSelectors: selectors
         });
 
         return cuts;

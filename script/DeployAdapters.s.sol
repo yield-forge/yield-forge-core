@@ -40,20 +40,13 @@ contract DeployAdapters is Script {
 
         // ============ Load Config File ============
         string memory chainId = vm.toString(block.chainid);
-        string memory configPath = string.concat(
-            vm.projectRoot(),
-            "/config/",
-            chainId,
-            ".json"
-        );
+        string memory configPath = string.concat(vm.projectRoot(), "/config/", chainId, ".json");
 
         string memory config;
         try vm.readFile(configPath) returns (string memory content) {
             config = content;
         } catch {
-            revert(
-                string.concat("Config not found: config/", chainId, ".json")
-            );
+            revert(string.concat("Config not found: config/", chainId, ".json"));
         }
         string memory networkName = vm.parseJsonString(config, ".name");
         string memory basePath = string.concat(".adapters.", adapterName);
@@ -71,9 +64,7 @@ contract DeployAdapters is Script {
 
         if (keccak256(bytes(adapterName)) == keccak256("UniswapV4Adapter")) {
             adapter = _deployV4(config, basePath, diamond);
-        } else if (
-            keccak256(bytes(adapterName)) == keccak256("UniswapV3Adapter")
-        ) {
+        } else if (keccak256(bytes(adapterName)) == keccak256("UniswapV3Adapter")) {
             adapter = _deployV3(config, basePath, diamond);
         } else if (keccak256(bytes(adapterName)) == keccak256("CurveAdapter")) {
             adapter = _deployCurve(config, basePath, diamond);
@@ -101,15 +92,8 @@ contract DeployAdapters is Script {
         console.log("=== Deployment Complete ===");
     }
 
-    function _deployV4(
-        string memory config,
-        string memory basePath,
-        address diamond
-    ) internal returns (address) {
-        address poolManager = vm.parseJsonAddress(
-            config,
-            string.concat(basePath, ".poolManager")
-        );
+    function _deployV4(string memory config, string memory basePath, address diamond) internal returns (address) {
+        address poolManager = vm.parseJsonAddress(config, string.concat(basePath, ".poolManager"));
         require(poolManager != address(0), "poolManager not configured");
 
         console.log("PoolManager:", poolManager);
@@ -119,46 +103,22 @@ contract DeployAdapters is Script {
         return address(adapter);
     }
 
-    function _deployV3(
-        string memory config,
-        string memory basePath,
-        address diamond
-    ) internal returns (address) {
-        address positionManager = vm.parseJsonAddress(
-            config,
-            string.concat(basePath, ".positionManager")
-        );
-        address factory = vm.parseJsonAddress(
-            config,
-            string.concat(basePath, ".factory")
-        );
-        require(
-            positionManager != address(0),
-            "positionManager not configured"
-        );
+    function _deployV3(string memory config, string memory basePath, address diamond) internal returns (address) {
+        address positionManager = vm.parseJsonAddress(config, string.concat(basePath, ".positionManager"));
+        address factory = vm.parseJsonAddress(config, string.concat(basePath, ".factory"));
+        require(positionManager != address(0), "positionManager not configured");
         require(factory != address(0), "factory not configured");
 
         console.log("PositionManager:", positionManager);
         console.log("Factory:", factory);
 
-        UniswapV3Adapter adapter = new UniswapV3Adapter(
-            positionManager,
-            factory,
-            diamond
-        );
+        UniswapV3Adapter adapter = new UniswapV3Adapter(positionManager, factory, diamond);
         console.log("UniswapV3Adapter deployed at:", address(adapter));
         return address(adapter);
     }
 
-    function _deployCurve(
-        string memory config,
-        string memory basePath,
-        address diamond
-    ) internal returns (address) {
-        address crvToken = vm.parseJsonAddress(
-            config,
-            string.concat(basePath, ".crvToken")
-        );
+    function _deployCurve(string memory config, string memory basePath, address diamond) internal returns (address) {
+        address crvToken = vm.parseJsonAddress(config, string.concat(basePath, ".crvToken"));
         require(crvToken != address(0), "crvToken not configured");
 
         console.log("CRV Token:", crvToken);
@@ -168,17 +128,9 @@ contract DeployAdapters is Script {
         return address(adapter);
     }
 
-    function _saveDeployment(
-        string memory adapterName,
-        address adapter
-    ) internal {
+    function _saveDeployment(string memory adapterName, address adapter) internal {
         string memory chainId = vm.toString(block.chainid);
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/deployments/adapters-",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/deployments/adapters-", chainId, ".json");
 
         // Try to read existing file, or start fresh
         string memory json = "adapters";
@@ -188,24 +140,15 @@ contract DeployAdapters is Script {
             // Parse existing adapters and re-serialize them
             string[] memory keys = vm.parseJsonKeys(content, "$");
             for (uint256 i = 0; i < keys.length; i++) {
-                if (
-                    keccak256(bytes(keys[i])) != keccak256(bytes(adapterName))
-                ) {
-                    address existingAdapter = vm.parseJsonAddress(
-                        content,
-                        string.concat(".", keys[i])
-                    );
+                if (keccak256(bytes(keys[i])) != keccak256(bytes(adapterName))) {
+                    address existingAdapter = vm.parseJsonAddress(content, string.concat(".", keys[i]));
                     vm.serializeAddress(json, keys[i], existingAdapter);
                 }
             }
         } catch {
             // File doesn't exist, that's fine
         }
-        string memory finalJson = vm.serializeAddress(
-            json,
-            adapterName,
-            adapter
-        );
+        string memory finalJson = vm.serializeAddress(json, adapterName, adapter);
 
         vm.writeJson(finalJson, path);
         console.log("Saved to:", path);
@@ -213,12 +156,7 @@ contract DeployAdapters is Script {
 
     function _loadDiamondAddress() internal view returns (address) {
         string memory chainId = vm.toString(block.chainid);
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/deployments/",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/deployments/", chainId, ".json");
 
         string memory json = vm.readFile(path);
         address diamond = vm.parseJsonAddress(json, ".Diamond");

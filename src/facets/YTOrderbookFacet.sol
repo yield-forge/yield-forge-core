@@ -7,9 +7,7 @@ import {LibReentrancyGuard} from "../libraries/LibReentrancyGuard.sol";
 import {ProtocolFees} from "../libraries/ProtocolFees.sol";
 import {YieldToken} from "../tokens/YieldToken.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title YTOrderbookFacet
@@ -211,12 +209,10 @@ contract YTOrderbookFacet {
      * // Sell 100 YT at 0.02 USDT each (6 decimals = 20000)
      * placeSellOrder(poolId, 100e18, 20000, 0);
      */
-    function placeSellOrder(
-        bytes32 poolId,
-        uint256 ytAmount,
-        uint256 pricePerYt,
-        uint256 ttlSeconds
-    ) external returns (uint256 orderId) {
+    function placeSellOrder(bytes32 poolId, uint256 ytAmount, uint256 pricePerYt, uint256 ttlSeconds)
+        external
+        returns (uint256 orderId)
+    {
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -251,8 +247,7 @@ contract YTOrderbookFacet {
 
         // Create order
         orderId = ++s.ytOrderbookNextId;
-        uint256 expiresAt = block.timestamp +
-            (ttlSeconds > 0 ? ttlSeconds : DEFAULT_ORDER_TTL);
+        uint256 expiresAt = block.timestamp + (ttlSeconds > 0 ? ttlSeconds : DEFAULT_ORDER_TTL);
 
         s.ytOrders[orderId] = LibAppStorage.YTOrder({
             id: orderId,
@@ -271,16 +266,7 @@ contract YTOrderbookFacet {
         // Track in pool's order list
         s.ytOrdersByPool[poolId].push(orderId);
 
-        emit OrderPlaced(
-            orderId,
-            msg.sender,
-            poolId,
-            cycleId,
-            ytAmount,
-            pricePerYt,
-            true,
-            expiresAt
-        );
+        emit OrderPlaced(orderId, msg.sender, poolId, cycleId, ytAmount, pricePerYt, true, expiresAt);
 
         LibReentrancyGuard._nonReentrantAfter();
     }
@@ -301,12 +287,10 @@ contract YTOrderbookFacet {
      * // Buy 100 YT at max 0.03 USDT each (6 decimals = 30000)
      * placeBuyOrder(poolId, 100e18, 30000, 0);
      */
-    function placeBuyOrder(
-        bytes32 poolId,
-        uint256 ytAmount,
-        uint256 pricePerYt,
-        uint256 ttlSeconds
-    ) external returns (uint256 orderId) {
+    function placeBuyOrder(bytes32 poolId, uint256 ytAmount, uint256 pricePerYt, uint256 ttlSeconds)
+        external
+        returns (uint256 orderId)
+    {
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -337,16 +321,11 @@ contract YTOrderbookFacet {
         uint256 quoteAmount = (ytAmount * pricePerYt) / 1e18;
 
         // Transfer quote tokens to escrow
-        IERC20(pool.quoteToken).safeTransferFrom(
-            msg.sender,
-            address(this),
-            quoteAmount
-        );
+        IERC20(pool.quoteToken).safeTransferFrom(msg.sender, address(this), quoteAmount);
 
         // Create order
         orderId = ++s.ytOrderbookNextId;
-        uint256 expiresAt = block.timestamp +
-            (ttlSeconds > 0 ? ttlSeconds : DEFAULT_ORDER_TTL);
+        uint256 expiresAt = block.timestamp + (ttlSeconds > 0 ? ttlSeconds : DEFAULT_ORDER_TTL);
 
         s.ytOrders[orderId] = LibAppStorage.YTOrder({
             id: orderId,
@@ -366,16 +345,7 @@ contract YTOrderbookFacet {
         s.ytOrderEscrow[orderId] = quoteAmount;
         s.ytOrdersByPool[poolId].push(orderId);
 
-        emit OrderPlaced(
-            orderId,
-            msg.sender,
-            poolId,
-            cycleId,
-            ytAmount,
-            pricePerYt,
-            false,
-            expiresAt
-        );
+        emit OrderPlaced(orderId, msg.sender, poolId, cycleId, ytAmount, pricePerYt, false, expiresAt);
 
         LibReentrancyGuard._nonReentrantAfter();
     }
@@ -399,10 +369,7 @@ contract YTOrderbookFacet {
      * @custom:example
      * fillSellOrder(123, 50e18); // Buy 50 YT from order 123
      */
-    function fillSellOrder(
-        uint256 orderId,
-        uint256 fillAmount
-    ) external returns (uint256 quotePaid) {
+    function fillSellOrder(uint256 orderId, uint256 fillAmount) external returns (uint256 quotePaid) {
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -437,34 +404,21 @@ contract YTOrderbookFacet {
         uint256 makerReceives = quoteAmount - takerFee;
 
         LibAppStorage.PoolInfo storage pool = s.pools[order.poolId];
-        LibAppStorage.CycleInfo storage cycle = s.cycles[order.poolId][
-            order.cycleId
-        ];
+        LibAppStorage.CycleInfo storage cycle = s.cycles[order.poolId][order.cycleId];
 
         // Transfer quote from taker
-        IERC20(pool.quoteToken).safeTransferFrom(
-            msg.sender,
-            address(this),
-            quoteAmount
-        );
+        IERC20(pool.quoteToken).safeTransferFrom(msg.sender, address(this), quoteAmount);
 
         // Pay maker
         IERC20(pool.quoteToken).safeTransfer(order.maker, makerReceives);
 
         // Send fee to protocol
         if (takerFee > 0) {
-            IERC20(pool.quoteToken).safeTransfer(
-                s.protocolFeeRecipient,
-                takerFee
-            );
+            IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
         }
 
         // Transfer YT from maker to taker
-        IERC20(cycle.ytToken).safeTransferFrom(
-            order.maker,
-            msg.sender,
-            fillAmount
-        );
+        IERC20(cycle.ytToken).safeTransferFrom(order.maker, msg.sender, fillAmount);
 
         // Update order state
         order.filledAmount += fillAmount;
@@ -473,14 +427,7 @@ contract YTOrderbookFacet {
         }
 
         emit OrderFilled(
-            orderId,
-            msg.sender,
-            order.poolId,
-            order.cycleId,
-            order.maker,
-            fillAmount,
-            quoteAmount,
-            takerFee
+            orderId, msg.sender, order.poolId, order.cycleId, order.maker, fillAmount, quoteAmount, takerFee
         );
 
         LibReentrancyGuard._nonReentrantAfter();
@@ -500,10 +447,7 @@ contract YTOrderbookFacet {
      * @custom:example
      * fillBuyOrder(456, 50e18); // Sell 50 YT to order 456
      */
-    function fillBuyOrder(
-        uint256 orderId,
-        uint256 fillAmount
-    ) external returns (uint256 quoteReceived) {
+    function fillBuyOrder(uint256 orderId, uint256 fillAmount) external returns (uint256 quoteReceived) {
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -538,26 +482,17 @@ contract YTOrderbookFacet {
         uint256 takerReceives = quoteAmount - takerFee;
 
         LibAppStorage.PoolInfo storage pool = s.pools[order.poolId];
-        LibAppStorage.CycleInfo storage cycle = s.cycles[order.poolId][
-            order.cycleId
-        ];
+        LibAppStorage.CycleInfo storage cycle = s.cycles[order.poolId][order.cycleId];
 
         // Transfer YT from taker to maker
-        IERC20(cycle.ytToken).safeTransferFrom(
-            msg.sender,
-            order.maker,
-            fillAmount
-        );
+        IERC20(cycle.ytToken).safeTransferFrom(msg.sender, order.maker, fillAmount);
 
         // Release escrowed quote to taker
         IERC20(pool.quoteToken).safeTransfer(msg.sender, takerReceives);
 
         // Send fee to protocol
         if (takerFee > 0) {
-            IERC20(pool.quoteToken).safeTransfer(
-                s.protocolFeeRecipient,
-                takerFee
-            );
+            IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
         }
 
         // Update order state and escrow
@@ -569,14 +504,7 @@ contract YTOrderbookFacet {
         }
 
         emit OrderFilled(
-            orderId,
-            msg.sender,
-            order.poolId,
-            order.cycleId,
-            order.maker,
-            fillAmount,
-            quoteAmount,
-            takerFee
+            orderId, msg.sender, order.poolId, order.cycleId, order.maker, fillAmount, quoteAmount, takerFee
         );
 
         LibReentrancyGuard._nonReentrantAfter();
@@ -621,10 +549,7 @@ contract YTOrderbookFacet {
             uint256 escrowedAmount = s.ytOrderEscrow[orderId];
             if (escrowedAmount > 0) {
                 LibAppStorage.PoolInfo storage pool = s.pools[order.poolId];
-                IERC20(pool.quoteToken).safeTransfer(
-                    msg.sender,
-                    escrowedAmount
-                );
+                IERC20(pool.quoteToken).safeTransfer(msg.sender, escrowedAmount);
                 s.ytOrderEscrow[orderId] = 0;
             }
         }
@@ -661,12 +586,10 @@ contract YTOrderbookFacet {
      * @custom:example
      * marketBuy(poolId, cycleId, 100e18, 10e6); // Buy 100 YT, max 10 USDC
      */
-    function marketBuy(
-        bytes32 poolId,
-        uint256 cycleId,
-        uint256 ytAmount,
-        uint256 maxQuote
-    ) external returns (uint256 totalQuote) {
+    function marketBuy(bytes32 poolId, uint256 cycleId, uint256 ytAmount, uint256 maxQuote)
+        external
+        returns (uint256 totalQuote)
+    {
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -699,18 +622,12 @@ contract YTOrderbookFacet {
             LibAppStorage.YTOrder storage order = s.ytOrders[sortedOrderIds[i]];
 
             // Skip if order is not valid
-            if (
-                !order.isActive ||
-                order.maker == msg.sender ||
-                block.timestamp >= order.expiresAt
-            ) {
+            if (!order.isActive || order.maker == msg.sender || block.timestamp >= order.expiresAt) {
                 continue;
             }
 
             uint256 orderRemaining = order.ytAmount - order.filledAmount;
-            uint256 fillAmount = remainingYT < orderRemaining
-                ? remainingYT
-                : orderRemaining;
+            uint256 fillAmount = remainingYT < orderRemaining ? remainingYT : orderRemaining;
 
             // Calculate quote cost
             uint256 quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
@@ -736,29 +653,18 @@ contract YTOrderbookFacet {
             }
 
             // Transfer quote from taker
-            IERC20(pool.quoteToken).safeTransferFrom(
-                msg.sender,
-                address(this),
-                quoteAmount
-            );
+            IERC20(pool.quoteToken).safeTransferFrom(msg.sender, address(this), quoteAmount);
 
             // Pay maker
             IERC20(pool.quoteToken).safeTransfer(order.maker, makerReceives);
 
             // Send fee to protocol
             if (takerFee > 0) {
-                IERC20(pool.quoteToken).safeTransfer(
-                    s.protocolFeeRecipient,
-                    takerFee
-                );
+                IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
             }
 
             // Transfer YT from maker to taker
-            IERC20(cycle.ytToken).safeTransferFrom(
-                order.maker,
-                msg.sender,
-                fillAmount
-            );
+            IERC20(cycle.ytToken).safeTransferFrom(order.maker, msg.sender, fillAmount);
 
             // Update order state
             order.filledAmount += fillAmount;
@@ -766,16 +672,7 @@ contract YTOrderbookFacet {
                 order.isActive = false;
             }
 
-            emit OrderFilled(
-                order.id,
-                msg.sender,
-                poolId,
-                cycleId,
-                order.maker,
-                fillAmount,
-                quoteAmount,
-                takerFee
-            );
+            emit OrderFilled(order.id, msg.sender, poolId, cycleId, order.maker, fillAmount, quoteAmount, takerFee);
 
             remainingYT -= fillAmount;
             totalQuoteSpent += quoteAmount;
@@ -804,12 +701,10 @@ contract YTOrderbookFacet {
      * @custom:example
      * marketSell(poolId, cycleId, 100e18, 9e6); // Sell 100 YT, min 9 USDC
      */
-    function marketSell(
-        bytes32 poolId,
-        uint256 cycleId,
-        uint256 ytAmount,
-        uint256 minQuote
-    ) external returns (uint256 totalQuote) {
+    function marketSell(bytes32 poolId, uint256 cycleId, uint256 ytAmount, uint256 minQuote)
+        external
+        returns (uint256 totalQuote)
+    {
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -842,18 +737,12 @@ contract YTOrderbookFacet {
             LibAppStorage.YTOrder storage order = s.ytOrders[sortedOrderIds[i]];
 
             // Skip if order is not valid
-            if (
-                !order.isActive ||
-                order.maker == msg.sender ||
-                block.timestamp >= order.expiresAt
-            ) {
+            if (!order.isActive || order.maker == msg.sender || block.timestamp >= order.expiresAt) {
                 continue;
             }
 
             uint256 orderRemaining = order.ytAmount - order.filledAmount;
-            uint256 fillAmount = remainingYT < orderRemaining
-                ? remainingYT
-                : orderRemaining;
+            uint256 fillAmount = remainingYT < orderRemaining ? remainingYT : orderRemaining;
 
             // Calculate quote from escrow
             uint256 quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
@@ -864,21 +753,14 @@ contract YTOrderbookFacet {
             uint256 takerReceives = quoteAmount - takerFee;
 
             // Transfer YT from taker to maker
-            IERC20(cycle.ytToken).safeTransferFrom(
-                msg.sender,
-                order.maker,
-                fillAmount
-            );
+            IERC20(cycle.ytToken).safeTransferFrom(msg.sender, order.maker, fillAmount);
 
             // Release escrowed quote to taker
             IERC20(pool.quoteToken).safeTransfer(msg.sender, takerReceives);
 
             // Send fee to protocol
             if (takerFee > 0) {
-                IERC20(pool.quoteToken).safeTransfer(
-                    s.protocolFeeRecipient,
-                    takerFee
-                );
+                IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
             }
 
             // Update order state and escrow
@@ -889,16 +771,7 @@ contract YTOrderbookFacet {
                 order.isActive = false;
             }
 
-            emit OrderFilled(
-                order.id,
-                msg.sender,
-                poolId,
-                cycleId,
-                order.maker,
-                fillAmount,
-                quoteAmount,
-                takerFee
-            );
+            emit OrderFilled(order.id, msg.sender, poolId, cycleId, order.maker, fillAmount, quoteAmount, takerFee);
 
             remainingYT -= fillAmount;
             totalQuoteReceived += takerReceives;
@@ -922,10 +795,7 @@ contract YTOrderbookFacet {
      * @notice Get sorted sell orders (ascending by price - best first)
      * @dev Internal helper for marketBuy
      */
-    function _getSortedSellOrders(
-        bytes32 poolId,
-        uint256 cycleId
-    ) internal view returns (uint256[] memory) {
+    function _getSortedSellOrders(bytes32 poolId, uint256 cycleId) internal view returns (uint256[] memory) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256[] storage orderIds = s.ytOrdersByPool[poolId];
 
@@ -934,11 +804,8 @@ contract YTOrderbookFacet {
         for (uint256 i = 0; i < orderIds.length; i++) {
             LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
             if (
-                order.isActive &&
-                order.isSellOrder &&
-                order.cycleId == cycleId &&
-                order.filledAmount < order.ytAmount &&
-                block.timestamp < order.expiresAt
+                order.isActive && order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
+                    && block.timestamp < order.expiresAt
             ) {
                 count++;
             }
@@ -950,11 +817,8 @@ contract YTOrderbookFacet {
         for (uint256 i = 0; i < orderIds.length && idx < count; i++) {
             LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
             if (
-                order.isActive &&
-                order.isSellOrder &&
-                order.cycleId == cycleId &&
-                order.filledAmount < order.ytAmount &&
-                block.timestamp < order.expiresAt
+                order.isActive && order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
+                    && block.timestamp < order.expiresAt
             ) {
                 result[idx++] = orderIds[i];
             }
@@ -963,10 +827,7 @@ contract YTOrderbookFacet {
         // Sort by price ascending (bubble sort - fine for small arrays)
         for (uint256 i = 0; i < result.length; i++) {
             for (uint256 j = i + 1; j < result.length; j++) {
-                if (
-                    s.ytOrders[result[i]].pricePerYt >
-                    s.ytOrders[result[j]].pricePerYt
-                ) {
+                if (s.ytOrders[result[i]].pricePerYt > s.ytOrders[result[j]].pricePerYt) {
                     uint256 temp = result[i];
                     result[i] = result[j];
                     result[j] = temp;
@@ -981,10 +842,7 @@ contract YTOrderbookFacet {
      * @notice Get sorted buy orders (descending by price - best first)
      * @dev Internal helper for marketSell
      */
-    function _getSortedBuyOrders(
-        bytes32 poolId,
-        uint256 cycleId
-    ) internal view returns (uint256[] memory) {
+    function _getSortedBuyOrders(bytes32 poolId, uint256 cycleId) internal view returns (uint256[] memory) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256[] storage orderIds = s.ytOrdersByPool[poolId];
 
@@ -993,11 +851,8 @@ contract YTOrderbookFacet {
         for (uint256 i = 0; i < orderIds.length; i++) {
             LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
             if (
-                order.isActive &&
-                !order.isSellOrder &&
-                order.cycleId == cycleId &&
-                order.filledAmount < order.ytAmount &&
-                block.timestamp < order.expiresAt
+                order.isActive && !order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
+                    && block.timestamp < order.expiresAt
             ) {
                 count++;
             }
@@ -1009,11 +864,8 @@ contract YTOrderbookFacet {
         for (uint256 i = 0; i < orderIds.length && idx < count; i++) {
             LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
             if (
-                order.isActive &&
-                !order.isSellOrder &&
-                order.cycleId == cycleId &&
-                order.filledAmount < order.ytAmount &&
-                block.timestamp < order.expiresAt
+                order.isActive && !order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
+                    && block.timestamp < order.expiresAt
             ) {
                 result[idx++] = orderIds[i];
             }
@@ -1022,10 +874,7 @@ contract YTOrderbookFacet {
         // Sort by price descending (bubble sort - fine for small arrays)
         for (uint256 i = 0; i < result.length; i++) {
             for (uint256 j = i + 1; j < result.length; j++) {
-                if (
-                    s.ytOrders[result[i]].pricePerYt <
-                    s.ytOrders[result[j]].pricePerYt
-                ) {
+                if (s.ytOrders[result[i]].pricePerYt < s.ytOrders[result[j]].pricePerYt) {
                     uint256 temp = result[i];
                     result[i] = result[j];
                     result[j] = temp;
@@ -1046,24 +895,21 @@ contract YTOrderbookFacet {
      * @return order Order struct
      */
     function getOrder(uint256 orderId) external view returns (Order memory) {
-        LibAppStorage.YTOrder storage o = LibAppStorage
-            .diamondStorage()
-            .ytOrders[orderId];
+        LibAppStorage.YTOrder storage o = LibAppStorage.diamondStorage().ytOrders[orderId];
 
-        return
-            Order({
-                id: o.id,
-                maker: o.maker,
-                poolId: o.poolId,
-                cycleId: o.cycleId,
-                ytAmount: o.ytAmount,
-                filledAmount: o.filledAmount,
-                pricePerYt: o.pricePerYt,
-                isSellOrder: o.isSellOrder,
-                createdAt: o.createdAt,
-                expiresAt: o.expiresAt,
-                isActive: o.isActive
-            });
+        return Order({
+            id: o.id,
+            maker: o.maker,
+            poolId: o.poolId,
+            cycleId: o.cycleId,
+            ytAmount: o.ytAmount,
+            filledAmount: o.filledAmount,
+            pricePerYt: o.pricePerYt,
+            isSellOrder: o.isSellOrder,
+            createdAt: o.createdAt,
+            expiresAt: o.expiresAt,
+            isActive: o.isActive
+        });
     }
 
     /**
@@ -1071,9 +917,7 @@ contract YTOrderbookFacet {
      * @param poolId Pool identifier
      * @return orders Array of active orders
      */
-    function getActiveOrders(
-        bytes32 poolId
-    ) external view returns (Order[] memory orders) {
+    function getActiveOrders(bytes32 poolId) external view returns (Order[] memory orders) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256[] storage orderIds = s.ytOrdersByPool[poolId];
 
@@ -1131,9 +975,7 @@ contract YTOrderbookFacet {
      * @return totalSellVolume Total YT available for sale
      * @return totalBuyVolume Total YT demand in buy orders
      */
-    function getOrderbookSummary(
-        bytes32 poolId
-    )
+    function getOrderbookSummary(bytes32 poolId)
         external
         view
         returns (
@@ -1191,11 +1033,10 @@ contract YTOrderbookFacet {
      * @notice Validate order for filling
      * @dev Checks: order exists, is active, not expired, correct type, cycle not matured
      */
-    function _validateOrderForFill(
-        LibAppStorage.YTOrder storage order,
-        uint256 orderId,
-        bool expectSellOrder
-    ) internal view {
+    function _validateOrderForFill(LibAppStorage.YTOrder storage order, uint256 orderId, bool expectSellOrder)
+        internal
+        view
+    {
         if (order.id == 0) {
             revert OrderNotFound(orderId);
         }
@@ -1210,9 +1051,7 @@ contract YTOrderbookFacet {
         }
 
         // Check cycle has not matured (no point trading YT after maturity)
-        LibAppStorage.CycleInfo storage cycle = LibAppStorage
-            .diamondStorage()
-            .cycles[order.poolId][order.cycleId];
+        LibAppStorage.CycleInfo storage cycle = LibAppStorage.diamondStorage().cycles[order.poolId][order.cycleId];
         if (block.timestamp >= cycle.maturityDate) {
             revert CycleMatured(order.poolId, order.cycleId);
         }

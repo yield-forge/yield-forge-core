@@ -53,10 +53,7 @@ library ProtocolFees {
      * @param feeBps Fee in basis points
      * @return Fee amount
      */
-    function calculateFee(
-        uint256 amount,
-        uint256 feeBps
-    ) internal pure returns (uint256) {
+    function calculateFee(uint256 amount, uint256 feeBps) internal pure returns (uint256) {
         return (amount * feeBps) / BPS_DENOMINATOR;
     }
 

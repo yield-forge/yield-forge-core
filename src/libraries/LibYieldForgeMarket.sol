@@ -114,9 +114,7 @@ library LibYieldForgeMarket {
      * maturity in 180 days: fee = 10 + (50-10) * (365-180)/365 ≈ 30 bps
      * maturity in 30 days:  fee = 10 + (50-10) * (365-30)/365 ≈ 47 bps
      */
-    function getSwapFeeBps(
-        uint256 maturityDate
-    ) internal view returns (uint256 feeBps) {
+    function getSwapFeeBps(uint256 maturityDate) internal view returns (uint256 feeBps) {
         // Handle already matured case
         if (block.timestamp >= maturityDate) {
             return MAX_FEE_BPS;
@@ -131,8 +129,7 @@ library LibYieldForgeMarket {
 
         // Linear interpolation between BASE and MAX
         // fee = BASE + (MAX - BASE) * (YEAR - timeToMaturity) / YEAR
-        uint256 additionalFee = ((MAX_FEE_BPS - BASE_FEE_BPS) *
-            (YEAR - timeToMaturity)) / YEAR;
+        uint256 additionalFee = ((MAX_FEE_BPS - BASE_FEE_BPS) * (YEAR - timeToMaturity)) / YEAR;
 
         return BASE_FEE_BPS + additionalFee;
     }
@@ -143,9 +140,7 @@ library LibYieldForgeMarket {
      * @return lpFee Fee portion for LPs (80%)
      * @return protocolFee Fee portion for protocol (20%)
      */
-    function splitFee(
-        uint256 totalFee
-    ) internal pure returns (uint256 lpFee, uint256 protocolFee) {
+    function splitFee(uint256 totalFee) internal pure returns (uint256 lpFee, uint256 protocolFee) {
         lpFee = (totalFee * LP_FEE_SHARE_BPS) / BPS_DENOMINATOR;
         protocolFee = totalFee - lpFee; // Remainder to avoid rounding issues
     }
@@ -185,10 +180,7 @@ library LibYieldForgeMarket {
      * - Returns 0 if current time is before creation (should not happen)
      * - Uses checked math (Solidity 0.8+) for overflow protection
      */
-    function getTimeDecayFactor(
-        uint256 createdAt,
-        uint256 maturityDate
-    ) internal view returns (uint256 factor) {
+    function getTimeDecayFactor(uint256 createdAt, uint256 maturityDate) internal view returns (uint256 factor) {
         // Edge case: already at or past maturity
         if (block.timestamp >= maturityDate) {
             return TIME_PRECISION;
@@ -265,17 +257,11 @@ library LibYieldForgeMarket {
         if (ptReserve >= virtualQuoteReserve) {
             // Normal case: PT at discount (quote < pt)
             uint256 gap = ptReserve - virtualQuoteReserve;
-            effectiveQuote =
-                virtualQuoteReserve +
-                (gap * decayFactor) /
-                TIME_PRECISION;
+            effectiveQuote = virtualQuoteReserve + (gap * decayFactor) / TIME_PRECISION;
         } else {
             // Rare case: PT at premium (quote > pt)
             uint256 gap = virtualQuoteReserve - ptReserve;
-            effectiveQuote =
-                virtualQuoteReserve -
-                (gap * decayFactor) /
-                TIME_PRECISION;
+            effectiveQuote = virtualQuoteReserve - (gap * decayFactor) / TIME_PRECISION;
         }
     }
 
@@ -357,12 +343,11 @@ library LibYieldForgeMarket {
      *   amountInWithFee = 100 * 9970 / 10000 = 99.7
      *   amountOut = 1000 * 99.7 / (900 + 99.7) = 99.73 PT
      */
-    function getAmountOut(
-        uint256 amountIn,
-        uint256 reserveIn,
-        uint256 reserveOut,
-        uint256 feeBps
-    ) internal pure returns (uint256 amountOut, uint256 feeAmount) {
+    function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
+        internal
+        pure
+        returns (uint256 amountOut, uint256 feeAmount)
+    {
         if (amountIn == 0) revert ZeroAmount();
         if (reserveIn == 0 || reserveOut == 0) revert InsufficientLiquidity();
 
@@ -398,12 +383,11 @@ library LibYieldForgeMarket {
      * @param feeBps Fee in basis points
      * @return amountIn Required input amount (including fee)
      */
-    function getAmountIn(
-        uint256 amountOut,
-        uint256 reserveIn,
-        uint256 reserveOut,
-        uint256 feeBps
-    ) internal pure returns (uint256 amountIn) {
+    function getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut, uint256 feeBps)
+        internal
+        pure
+        returns (uint256 amountIn)
+    {
         if (amountOut == 0) revert ZeroAmount();
         if (reserveIn == 0 || reserveOut == 0) revert InsufficientLiquidity();
         if (amountOut >= reserveOut) revert InsufficientLiquidity();
@@ -414,10 +398,7 @@ library LibYieldForgeMarket {
         uint256 amountInWithoutFee = (numerator / denominator) + 1; // Round up
 
         // Add fee: amountIn = amountInWithoutFee * 10000 / (10000 - feeBps)
-        amountIn =
-            (amountInWithoutFee * BPS_DENOMINATOR) /
-            (BPS_DENOMINATOR - feeBps) +
-            1; // Round up
+        amountIn = (amountInWithoutFee * BPS_DENOMINATOR) / (BPS_DENOMINATOR - feeBps) + 1; // Round up
     }
 
     // ============================================================
@@ -467,12 +448,8 @@ library LibYieldForgeMarket {
         uint256 maturityDate
     ) internal view returns (uint256 amountOut, uint256 feeAmount) {
         // Calculate time-adjusted quote reserve
-        uint256 effectiveQuote = getEffectiveVirtualQuoteReserve(
-            virtualQuoteReserve,
-            ptReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectiveQuote =
+            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate);
 
         // Use standard AMM formula with effective reserve
         return getAmountOut(amountIn, effectiveQuote, ptReserve, feeBps);
@@ -516,12 +493,7 @@ library LibYieldForgeMarket {
         uint256 maturityDate
     ) internal view returns (uint256 amountOut, uint256 feeAmount) {
         // Calculate time-adjusted PT reserve
-        uint256 effectivePt = getEffectivePtReserve(
-            ptReserve,
-            virtualQuoteReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectivePt = getEffectivePtReserve(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
 
         // Use standard AMM formula with effective reserve
         return getAmountOut(amountIn, effectivePt, virtualQuoteReserve, feeBps);
@@ -547,12 +519,8 @@ library LibYieldForgeMarket {
         uint256 createdAt,
         uint256 maturityDate
     ) internal view returns (uint256 amountIn) {
-        uint256 effectiveQuote = getEffectiveVirtualQuoteReserve(
-            virtualQuoteReserve,
-            ptReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectiveQuote =
+            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate);
 
         return getAmountIn(amountOut, effectiveQuote, ptReserve, feeBps);
     }
@@ -577,12 +545,7 @@ library LibYieldForgeMarket {
         uint256 createdAt,
         uint256 maturityDate
     ) internal view returns (uint256 amountIn) {
-        uint256 effectivePt = getEffectivePtReserve(
-            ptReserve,
-            virtualQuoteReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectivePt = getEffectivePtReserve(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
 
         return getAmountIn(amountOut, effectivePt, virtualQuoteReserve, feeBps);
     }
@@ -608,18 +571,17 @@ library LibYieldForgeMarket {
      * @return lpTokens LP tokens to mint
      * @return virtualQuote Virtual quote reserve to initialize (18 decimals)
      */
-    function calculateInitialLpTokens(
-        uint256 ptAmount,
-        uint256 discountBps
-    ) internal pure returns (uint256 lpTokens, uint256 virtualQuote) {
+    function calculateInitialLpTokens(uint256 ptAmount, uint256 discountBps)
+        internal
+        pure
+        returns (uint256 lpTokens, uint256 virtualQuote)
+    {
         if (ptAmount == 0) revert ZeroAmount();
         if (discountBps >= BPS_DENOMINATOR) revert InvalidDiscount(discountBps);
 
         // Calculate virtual quote: PT value at discount (18 decimals)
         // virtualQuote = ptAmount * (10000 - discountBps) / 10000
-        virtualQuote =
-            (ptAmount * (BPS_DENOMINATOR - discountBps)) /
-            BPS_DENOMINATOR;
+        virtualQuote = (ptAmount * (BPS_DENOMINATOR - discountBps)) / BPS_DENOMINATOR;
 
         // LP tokens = sqrt(ptAmount * virtualQuote)
         lpTokens = sqrt(ptAmount * virtualQuote);
@@ -645,14 +607,15 @@ library LibYieldForgeMarket {
      * @param totalLpShares Current total LP shares
      * @return lpTokens LP tokens to mint
      */
-    function calculateSubsequentLpTokens(
-        uint256 ptAmount,
-        uint256 ptReserve,
-        uint256 totalLpShares
-    ) internal pure returns (uint256 lpTokens) {
+    function calculateSubsequentLpTokens(uint256 ptAmount, uint256 ptReserve, uint256 totalLpShares)
+        internal
+        pure
+        returns (uint256 lpTokens)
+    {
         if (ptAmount == 0) revert ZeroAmount();
-        if (ptReserve == 0 || totalLpShares == 0)
+        if (ptReserve == 0 || totalLpShares == 0) {
             revert InsufficientLiquidity();
+        }
 
         // LP tokens proportional to PT contribution
         lpTokens = (ptAmount * totalLpShares) / ptReserve;
@@ -667,11 +630,11 @@ library LibYieldForgeMarket {
      * @param totalLpShares Current total LP shares
      * @return ptAmount PT tokens to return
      */
-    function calculateWithdrawAmount(
-        uint256 lpTokens,
-        uint256 ptReserve,
-        uint256 totalLpShares
-    ) internal pure returns (uint256 ptAmount) {
+    function calculateWithdrawAmount(uint256 lpTokens, uint256 ptReserve, uint256 totalLpShares)
+        internal
+        pure
+        returns (uint256 ptAmount)
+    {
         if (lpTokens == 0) revert ZeroAmount();
         if (totalLpShares == 0) revert InsufficientLiquidity();
 
@@ -691,10 +654,7 @@ library LibYieldForgeMarket {
      * @param virtualQuoteReserve Current virtual quote reserve
      * @return priceBps Price in basis points (10000 = 1.00)
      */
-    function getPtPriceBps(
-        uint256 ptReserve,
-        uint256 virtualQuoteReserve
-    ) internal pure returns (uint256 priceBps) {
+    function getPtPriceBps(uint256 ptReserve, uint256 virtualQuoteReserve) internal pure returns (uint256 priceBps) {
         if (ptReserve == 0) return BPS_DENOMINATOR; // Par if no liquidity
 
         priceBps = (virtualQuoteReserve * BPS_DENOMINATOR) / ptReserve;
@@ -708,10 +668,11 @@ library LibYieldForgeMarket {
      * @param virtualQuoteReserve Current virtual quote reserve
      * @return discountBps Discount in basis points
      */
-    function getDiscountBps(
-        uint256 ptReserve,
-        uint256 virtualQuoteReserve
-    ) internal pure returns (uint256 discountBps) {
+    function getDiscountBps(uint256 ptReserve, uint256 virtualQuoteReserve)
+        internal
+        pure
+        returns (uint256 discountBps)
+    {
         uint256 priceBps = getPtPriceBps(ptReserve, virtualQuoteReserve);
 
         if (priceBps >= BPS_DENOMINATOR) return 0; // No discount or premium
@@ -749,12 +710,8 @@ library LibYieldForgeMarket {
         if (ptReserve == 0) return 0;
 
         // Get time-adjusted quote reserve
-        uint256 effectiveQuote = getEffectiveVirtualQuoteReserve(
-            virtualQuoteReserve,
-            ptReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 effectiveQuote =
+            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate);
 
         // Calculate price: effectiveQuote / ptReserve * BPS_DENOMINATOR
         priceBps = (effectiveQuote * BPS_DENOMINATOR) / ptReserve;
@@ -776,12 +733,7 @@ library LibYieldForgeMarket {
         uint256 createdAt,
         uint256 maturityDate
     ) internal view returns (uint256 discountBps) {
-        uint256 priceBps = getEffectivePtPriceBps(
-            ptReserve,
-            virtualQuoteReserve,
-            createdAt,
-            maturityDate
-        );
+        uint256 priceBps = getEffectivePtPriceBps(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
 
         if (priceBps >= BPS_DENOMINATOR) return 0;
 

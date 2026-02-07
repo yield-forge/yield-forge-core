@@ -20,10 +20,7 @@ interface IERC173 {
     /// @notice Emitted when ownership changes
     /// @param previousOwner Previous owner
     /// @param newOwner New owner
-    event OwnershipTransferred(
-        address indexed previousOwner,
-        address indexed newOwner
-    );
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     /// @notice Get the contract owner address
     /// @return owner_ Owner address

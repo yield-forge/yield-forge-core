@@ -3,9 +3,7 @@ pragma solidity ^0.8.26;
 
 import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // Note: Uniswap V3 interfaces are defined locally because v3-periphery
 // has OpenZeppelin version conflicts (uses OZ 3.x, we use OZ 5.x).
@@ -55,36 +53,24 @@ interface INonfungiblePositionManager {
         uint128 amount1Max;
     }
 
-    function mint(
-        MintParams calldata params
-    )
+    function mint(MintParams calldata params)
         external
         payable
-        returns (
-            uint256 tokenId,
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
-        );
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 
-    function increaseLiquidity(
-        IncreaseLiquidityParams calldata params
-    )
+    function increaseLiquidity(IncreaseLiquidityParams calldata params)
         external
         payable
         returns (uint128 liquidity, uint256 amount0, uint256 amount1);
 
-    function decreaseLiquidity(
-        DecreaseLiquidityParams calldata params
-    ) external payable returns (uint256 amount0, uint256 amount1);
+    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
+        external
+        payable
+        returns (uint256 amount0, uint256 amount1);
 
-    function collect(
-        CollectParams calldata params
-    ) external payable returns (uint256 amount0, uint256 amount1);
+    function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1);
 
-    function positions(
-        uint256 tokenId
-    )
+    function positions(uint256 tokenId)
         external
         view
         returns (
@@ -124,11 +110,7 @@ interface IUniswapV3Pool {
  * @dev Used to verify pool addresses
  */
 interface IUniswapV3Factory {
-    function getPool(
-        address tokenA,
-        address tokenB,
-        uint24 fee
-    ) external view returns (address pool);
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
 }
 
 /**
@@ -218,34 +200,17 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     //                        EVENTS
     // ============================================================
 
-    event V3PositionCreated(
-        address indexed pool,
-        uint256 indexed tokenId,
-        uint128 liquidity
-    );
+    event V3PositionCreated(address indexed pool, uint256 indexed tokenId, uint128 liquidity);
 
     event V3LiquidityAdded(
-        address indexed pool,
-        uint256 indexed tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
+        address indexed pool, uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1
     );
 
     event V3LiquidityRemoved(
-        address indexed pool,
-        uint256 indexed tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
+        address indexed pool, uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1
     );
 
-    event V3YieldCollected(
-        address indexed pool,
-        uint256 indexed tokenId,
-        uint256 yield0,
-        uint256 yield1
-    );
+    event V3YieldCollected(address indexed pool, uint256 indexed tokenId, uint256 yield0, uint256 yield1);
 
     // ============================================================
     //                       CONSTRUCTOR
@@ -301,19 +266,14 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @return amount0Used Actual token0 used
      * @return amount1Used Actual token1 used
      */
-    function addLiquidity(
-        bytes calldata params
-    )
+    function addLiquidity(bytes calldata params)
         external
         override
         onlyDiamond
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
         // Decode parameters
-        (address pool, uint256 amount0, uint256 amount1) = abi.decode(
-            params,
-            (address, uint256, uint256)
-        );
+        (address pool, uint256 amount0, uint256 amount1) = abi.decode(params, (address, uint256, uint256));
 
         // Get pool info
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
@@ -334,15 +294,8 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
         if (tokenId == 0) {
             // No existing position - mint new NFT
-            (tokenId, liquidity, amount0Used, amount1Used) = _mintPosition(
-                token0,
-                token1,
-                fee,
-                tickLower,
-                tickUpper,
-                amount0,
-                amount1
-            );
+            (tokenId, liquidity, amount0Used, amount1Used) =
+                _mintPosition(token0, token1, fee, tickLower, tickUpper, amount0, amount1);
 
             // Store token ID for future operations
             poolToTokenId[pool] = tokenId;
@@ -350,11 +303,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
             emit V3PositionCreated(pool, tokenId, liquidity);
         } else {
             // Existing position - increase liquidity
-            (liquidity, amount0Used, amount1Used) = _increaseLiquidity(
-                tokenId,
-                amount0,
-                amount1
-            );
+            (liquidity, amount0Used, amount1Used) = _increaseLiquidity(tokenId, amount0, amount1);
         }
 
         // Return unused tokens to diamond
@@ -368,13 +317,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
             IERC20(token1).safeTransfer(diamond, balance1);
         }
 
-        emit V3LiquidityAdded(
-            pool,
-            tokenId,
-            liquidity,
-            amount0Used,
-            amount1Used
-        );
+        emit V3LiquidityAdded(pool, tokenId, liquidity, amount0Used, amount1Used);
         emit LiquidityAdded(diamond, liquidity, amount0Used, amount1Used);
     }
 
@@ -387,10 +330,12 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @return amount0 Token0 received
      * @return amount1 Token1 received
      */
-    function removeLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external override onlyDiamond returns (uint256 amount0, uint256 amount1) {
+    function removeLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        override
+        onlyDiamond
+        returns (uint256 amount0, uint256 amount1)
+    {
         address pool = abi.decode(params, (address));
         uint256 tokenId = poolToTokenId[pool];
 
@@ -410,10 +355,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         // Collect tokens (includes the decreased liquidity + any accumulated fees)
         (amount0, amount1) = positionManager.collect(
             INonfungiblePositionManager.CollectParams({
-                tokenId: tokenId,
-                recipient: diamond,
-                amount0Max: MAX_UINT128,
-                amount1Max: MAX_UINT128
+                tokenId: tokenId, recipient: diamond, amount0Max: MAX_UINT128, amount1Max: MAX_UINT128
             })
         );
 
@@ -433,9 +375,12 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @return yield0 Fees collected in token0
      * @return yield1 Fees collected in token1
      */
-    function collectYield(
-        bytes calldata params
-    ) external override onlyDiamond returns (uint256 yield0, uint256 yield1) {
+    function collectYield(bytes calldata params)
+        external
+        override
+        onlyDiamond
+        returns (uint256 yield0, uint256 yield1)
+    {
         address pool = abi.decode(params, (address));
         uint256 tokenId = poolToTokenId[pool];
 
@@ -444,10 +389,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         // Collect all accumulated fees
         (yield0, yield1) = positionManager.collect(
             INonfungiblePositionManager.CollectParams({
-                tokenId: tokenId,
-                recipient: diamond,
-                amount0Max: MAX_UINT128,
-                amount1Max: MAX_UINT128
+                tokenId: tokenId, recipient: diamond, amount0Max: MAX_UINT128, amount1Max: MAX_UINT128
             })
         );
 
@@ -471,15 +413,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         int24 tickUpper,
         uint256 amount0,
         uint256 amount1
-    )
-        internal
-        returns (
-            uint256 tokenId,
-            uint128 liquidity,
-            uint256 amount0Used,
-            uint256 amount1Used
-        )
-    {
+    ) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {
         (tokenId, liquidity, amount0Used, amount1Used) = positionManager.mint(
             INonfungiblePositionManager.MintParams({
                 token0: token0,
@@ -501,25 +435,20 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @notice Increase liquidity in existing position
      * @dev Called on subsequent addLiquidity calls
      */
-    function _increaseLiquidity(
-        uint256 tokenId,
-        uint256 amount0,
-        uint256 amount1
-    )
+    function _increaseLiquidity(uint256 tokenId, uint256 amount0, uint256 amount1)
         internal
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        (liquidity, amount0Used, amount1Used) = positionManager
-            .increaseLiquidity(
-                INonfungiblePositionManager.IncreaseLiquidityParams({
-                    tokenId: tokenId,
-                    amount0Desired: amount0,
-                    amount1Desired: amount1,
-                    amount0Min: 0,
-                    amount1Min: 0,
-                    deadline: block.timestamp
-                })
-            );
+        (liquidity, amount0Used, amount1Used) = positionManager.increaseLiquidity(
+            INonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: tokenId,
+                amount0Desired: amount0,
+                amount1Desired: amount1,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
+            })
+        );
     }
 
     // ============================================================
@@ -531,16 +460,14 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @param params Encoded pool address
      * @return liquidity Current position liquidity
      */
-    function getPositionLiquidity(
-        bytes calldata params
-    ) external view override returns (uint128 liquidity) {
+    function getPositionLiquidity(bytes calldata params) external view override returns (uint128 liquidity) {
         address pool = abi.decode(params, (address));
         uint256 tokenId = poolToTokenId[pool];
 
         if (tokenId == 0) return 0;
 
         // Get position info from NFT
-        (, , , , , , , liquidity, , , , ) = positionManager.positions(tokenId);
+        (,,,,,,, liquidity,,,,) = positionManager.positions(tokenId);
     }
 
     /**
@@ -549,9 +476,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @return token0 First token
      * @return token1 Second token
      */
-    function getPoolTokens(
-        bytes calldata params
-    ) external view override returns (address token0, address token1) {
+    function getPoolTokens(bytes calldata params) external view override returns (address token0, address token1) {
         address pool = abi.decode(params, (address));
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
         token0 = v3Pool.token0();
@@ -573,18 +498,19 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @return amount0 Estimated token0 to receive
      * @return amount1 Estimated token1 to receive
      */
-    function previewRemoveLiquidity(
-        uint128 liquidity,
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
+    function previewRemoveLiquidity(uint128 liquidity, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
         address pool = abi.decode(params, (address));
         uint256 tokenId = poolToTokenId[pool];
 
         if (tokenId == 0) return (0, 0);
 
         // Get current position info
-        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager
-            .positions(tokenId);
+        (,,,,,,, uint128 positionLiquidity,,,,) = positionManager.positions(tokenId);
 
         if (positionLiquidity == 0) return (0, 0);
 
@@ -602,9 +528,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @notice Check if pool is supported
      * @dev Validates pool exists in factory
      */
-    function supportsPool(
-        bytes calldata params
-    ) external view override returns (bool) {
+    function supportsPool(bytes calldata params) external view override returns (bool) {
         address pool = abi.decode(params, (address));
 
         // Verify it's a valid V3 pool by checking factory
@@ -647,18 +571,13 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @dev For V3, we call the pool to estimate. This is an approximation.
      * @param params Encoded (pool, amount0, amount1)
      */
-    function previewAddLiquidity(
-        bytes calldata params
-    )
+    function previewAddLiquidity(bytes calldata params)
         external
         view
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        (address pool, uint256 amount0, uint256 amount1) = abi.decode(
-            params,
-            (address, uint256, uint256)
-        );
+        (address pool, uint256 amount0, uint256 amount1) = abi.decode(params, (address, uint256, uint256));
 
         // For V3, estimation is complex without on-chain LiquidityAmounts library
         // We return a simplified estimate based on the smaller proportional amount
@@ -697,10 +616,12 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @notice Calculate optimal amount1 for given amount0
      * @dev Uses pool reserves ratio
      */
-    function calculateOptimalAmount1(
-        uint256 amount0,
-        bytes calldata params
-    ) external view override returns (uint256 amount1) {
+    function calculateOptimalAmount1(uint256 amount0, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount1)
+    {
         address pool = abi.decode(params, (address));
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
 
@@ -716,10 +637,12 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @notice Calculate optimal amount0 for given amount1
      * @dev Uses pool reserves ratio
      */
-    function calculateOptimalAmount0(
-        uint256 amount1,
-        bytes calldata params
-    ) external view override returns (uint256 amount0) {
+    function calculateOptimalAmount0(uint256 amount1, bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0)
+    {
         address pool = abi.decode(params, (address));
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
 
@@ -735,9 +658,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @notice Get current pool price
      * @dev V3 doesn't expose sqrtPriceX96 in minimal interface, returns 0
      */
-    function getPoolPrice(
-        bytes calldata params
-    ) external pure override returns (uint160 sqrtPriceX96, int24 tick) {
+    function getPoolPrice(bytes calldata params) external pure override returns (uint160 sqrtPriceX96, int24 tick) {
         // Note: Full V3 pool interface needed for slot0
         // For now, return 0 - UI should handle this gracefully
         params; // silence unused warning
@@ -747,9 +668,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     /**
      * @notice Get pool fee tier
      */
-    function getPoolFee(
-        bytes calldata params
-    ) external view override returns (uint24 fee) {
+    function getPoolFee(bytes calldata params) external view override returns (uint24 fee) {
         address pool = abi.decode(params, (address));
         fee = IUniswapV3Pool(pool).fee();
     }
@@ -770,17 +689,14 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @return amount0 Value of our position in token0
      * @return amount1 Value of our position in token1
      */
-    function getPositionValue(
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
+    function getPositionValue(bytes calldata params) external view override returns (uint256 amount0, uint256 amount1) {
         address pool = abi.decode(params, (address));
         uint256 tokenId = poolToTokenId[pool];
 
         if (tokenId == 0) return (0, 0);
 
         // Get position liquidity
-        (, , , , , , , uint128 positionLiquidity, , , , ) = positionManager
-            .positions(tokenId);
+        (,,,,,,, uint128 positionLiquidity,,,,) = positionManager.positions(tokenId);
 
         if (positionLiquidity == 0) return (0, 0);
 
@@ -799,19 +715,12 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
         // Simple approach: return proportional share based on position liquidity
         // This works well for pools where YF is a significant liquidity provider
-        amount0 = poolBalance0 > 0
-            ? (poolBalance0 * positionLiquidity) / (positionLiquidity + 1e18)
-            : 0;
-        amount1 = poolBalance1 > 0
-            ? (poolBalance1 * positionLiquidity) / (positionLiquidity + 1e18)
-            : 0;
+        amount0 = poolBalance0 > 0 ? (poolBalance0 * positionLiquidity) / (positionLiquidity + 1e18) : 0;
+        amount1 = poolBalance1 > 0 ? (poolBalance1 * positionLiquidity) / (positionLiquidity + 1e18) : 0;
 
         // More accurate approach would be to use previewRemoveLiquidity
         // but that's what we want to avoid. For V3, pool balances work reasonably well.
-        (amount0, amount1) = this.previewRemoveLiquidity(
-            positionLiquidity,
-            params
-        );
+        (amount0, amount1) = this.previewRemoveLiquidity(positionLiquidity, params);
     }
 
     /**
@@ -822,9 +731,12 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * @return amount0 Total token0 in the pool
      * @return amount1 Total token1 in the pool
      */
-    function getPoolTotalValue(
-        bytes calldata params
-    ) external view override returns (uint256 amount0, uint256 amount1) {
+    function getPoolTotalValue(bytes calldata params)
+        external
+        view
+        override
+        returns (uint256 amount0, uint256 amount1)
+    {
         address pool = abi.decode(params, (address));
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
 

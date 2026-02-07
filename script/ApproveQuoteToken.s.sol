@@ -3,9 +3,7 @@ pragma solidity ^0.8.26;
 
 import "forge-std/Script.sol";
 import {PoolRegistryFacet} from "../src/facets/PoolRegistryFacet.sol";
-import {
-    IERC20Metadata
-} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /**
  * @title ApproveQuoteToken
@@ -46,9 +44,7 @@ contract ApproveQuoteToken is Script {
             console.log("Token Symbol:", symbol);
             console.log("Token Decimals: 18");
         } else {
-            try IERC20Metadata(quoteToken).symbol() returns (
-                string memory symbol
-            ) {
+            try IERC20Metadata(quoteToken).symbol() returns (string memory symbol) {
                 console.log("Token Symbol:", symbol);
             } catch {
                 console.log("WARNING: Could not read token symbol");
@@ -76,26 +72,16 @@ contract ApproveQuoteToken is Script {
         vm.stopBroadcast();
 
         // ============ Verification ============
-        require(
-            registry.isQuoteTokenApproved(quoteToken),
-            "Quote token approval failed"
-        );
+        require(registry.isQuoteTokenApproved(quoteToken), "Quote token approval failed");
         console.log("SUCCESS: Quote token approved");
     }
 
     function _loadNativeTokenSymbol() internal view returns (string memory) {
         string memory chainId = vm.toString(block.chainid);
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/config/",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/config/", chainId, ".json");
 
         try vm.readFile(path) returns (string memory json) {
-            try vm.parseJsonString(json, ".nativeTokenSymbol") returns (
-                string memory symbol
-            ) {
+            try vm.parseJsonString(json, ".nativeTokenSymbol") returns (string memory symbol) {
                 return symbol;
             } catch {
                 return "ETH";
@@ -107,12 +93,7 @@ contract ApproveQuoteToken is Script {
 
     function _loadDiamondAddress() internal view returns (address) {
         string memory chainId = vm.toString(block.chainid);
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/deployments/",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/deployments/", chainId, ".json");
 
         string memory json = vm.readFile(path);
         address diamond = vm.parseJsonAddress(json, ".Diamond");

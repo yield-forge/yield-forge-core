@@ -69,9 +69,7 @@ contract Upgrade is Script, DeployHelper {
 
     function _upgradeFacet(address diamond, string memory facetName) internal {
         // Deploy new facet and get expected selectors
-        (address newFacet, bytes4[] memory expectedSelectors) = _deployFacet(
-            facetName
-        );
+        (address newFacet, bytes4[] memory expectedSelectors) = _deployFacet(facetName);
 
         if (newFacet == address(0)) {
             console.log("Unknown facet:", facetName);
@@ -81,11 +79,7 @@ contract Upgrade is Script, DeployHelper {
         console.log("New", facetName, "deployed at:", newFacet);
 
         // Build cuts by comparing with current Diamond state
-        IDiamondCut.FacetCut[] memory cuts = _buildCuts(
-            diamond,
-            newFacet,
-            expectedSelectors
-        );
+        IDiamondCut.FacetCut[] memory cuts = _buildCuts(diamond, newFacet, expectedSelectors);
 
         if (cuts.length == 0) {
             console.log("No changes needed for", facetName);
@@ -107,16 +101,14 @@ contract Upgrade is Script, DeployHelper {
             "DiamondLoupeFacet"
         ];
 
-        for (uint i = 0; i < facets.length; i++) {
+        for (uint256 i = 0; i < facets.length; i++) {
             console.log("--- Upgrading", facets[i], "---");
             _upgradeFacet(diamond, facets[i]);
             console.log("");
         }
     }
 
-    function _deployFacet(
-        string memory facetName
-    ) internal returns (address facet, bytes4[] memory selectors) {
+    function _deployFacet(string memory facetName) internal returns (address facet, bytes4[] memory selectors) {
         if (_strEq(facetName, "PoolRegistryFacet")) {
             facet = address(new PoolRegistryFacet());
             selectors = getPoolRegistrySelectors();
@@ -144,20 +136,20 @@ contract Upgrade is Script, DeployHelper {
         }
     }
 
-    function _buildCuts(
-        address diamond,
-        address newFacet,
-        bytes4[] memory expectedSelectors
-    ) internal view returns (IDiamondCut.FacetCut[] memory) {
+    function _buildCuts(address diamond, address newFacet, bytes4[] memory expectedSelectors)
+        internal
+        view
+        returns (IDiamondCut.FacetCut[] memory)
+    {
         // Separate selectors into Add vs Replace
         bytes4[] memory toAdd = new bytes4[](expectedSelectors.length);
         bytes4[] memory toReplace = new bytes4[](expectedSelectors.length);
-        uint addCount = 0;
-        uint replaceCount = 0;
+        uint256 addCount = 0;
+        uint256 replaceCount = 0;
 
         IDiamondLoupe loupe = IDiamondLoupe(diamond);
 
-        for (uint i = 0; i < expectedSelectors.length; i++) {
+        for (uint256 i = 0; i < expectedSelectors.length; i++) {
             bytes4 selector = expectedSelectors[i];
             address currentFacet = loupe.facetAddress(selector);
 
@@ -174,53 +166,38 @@ contract Upgrade is Script, DeployHelper {
         }
 
         // Build cuts array
-        uint cutCount = 0;
+        uint256 cutCount = 0;
         if (addCount > 0) cutCount++;
         if (replaceCount > 0) cutCount++;
 
-        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](
-            cutCount
-        );
-        uint cutIndex = 0;
+        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](cutCount);
+        uint256 cutIndex = 0;
 
         if (addCount > 0) {
             bytes4[] memory addSelectors = new bytes4[](addCount);
-            for (uint i = 0; i < addCount; i++) {
+            for (uint256 i = 0; i < addCount; i++) {
                 addSelectors[i] = toAdd[i];
             }
-            cuts[cutIndex++] = createCut(
-                newFacet,
-                IDiamondCut.FacetCutAction.Add,
-                addSelectors
-            );
+            cuts[cutIndex++] = createCut(newFacet, IDiamondCut.FacetCutAction.Add, addSelectors);
         }
 
         if (replaceCount > 0) {
             bytes4[] memory replaceSelectors = new bytes4[](replaceCount);
-            for (uint i = 0; i < replaceCount; i++) {
+            for (uint256 i = 0; i < replaceCount; i++) {
                 replaceSelectors[i] = toReplace[i];
             }
-            cuts[cutIndex++] = createCut(
-                newFacet,
-                IDiamondCut.FacetCutAction.Replace,
-                replaceSelectors
-            );
+            cuts[cutIndex++] = createCut(newFacet, IDiamondCut.FacetCutAction.Replace, replaceSelectors);
         }
 
         return cuts;
     }
 
-    function _executeCut(
-        address diamond,
-        IDiamondCut.FacetCut[] memory cuts
-    ) internal {
+    function _executeCut(address diamond, IDiamondCut.FacetCut[] memory cuts) internal {
         try IDiamondCut(diamond).diamondCut(cuts, address(0), "") {
             console.log("Upgrade executed successfully");
         } catch Error(string memory reason) {
             console.log("Upgrade failed:", reason);
-            console.log(
-                "If Diamond is owned by Timelock, use proposeDiamondCut."
-            );
+            console.log("If Diamond is owned by Timelock, use proposeDiamondCut.");
         } catch {
             console.log("Upgrade failed - check owner (likely Timelock)");
             console.log("Use proposeDiamondCut flow for production.");
@@ -229,12 +206,7 @@ contract Upgrade is Script, DeployHelper {
 
     function _loadDiamondAddress() internal view returns (address) {
         string memory chainId = vm.toString(block.chainid);
-        string memory path = string.concat(
-            vm.projectRoot(),
-            "/deployments/",
-            chainId,
-            ".json"
-        );
+        string memory path = string.concat(vm.projectRoot(), "/deployments/", chainId, ".json");
 
         string memory json = vm.readFile(path);
         address diamond = vm.parseJsonAddress(json, ".Diamond");
@@ -243,10 +215,7 @@ contract Upgrade is Script, DeployHelper {
         return diamond;
     }
 
-    function _strEq(
-        string memory a,
-        string memory b
-    ) internal pure returns (bool) {
+    function _strEq(string memory a, string memory b) internal pure returns (bool) {
         return keccak256(bytes(a)) == keccak256(bytes(b));
     }
 }

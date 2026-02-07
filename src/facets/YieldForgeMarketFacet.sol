@@ -6,9 +6,7 @@ import {LibYieldForgeMarket} from "../libraries/LibYieldForgeMarket.sol";
 import {LibPause} from "../libraries/LibPause.sol";
 import {LibReentrancyGuard} from "../libraries/LibReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title YieldForgeMarketFacet
@@ -63,11 +61,7 @@ contract YieldForgeMarketFacet {
 
     /// @notice Emitted when liquidity is added to YieldForge market
     event YieldForgeLiquidityAdded(
-        bytes32 indexed poolId,
-        uint256 indexed cycleId,
-        address indexed user,
-        uint256 ptAmount,
-        uint256 lpTokens
+        bytes32 indexed poolId, uint256 indexed cycleId, address indexed user, uint256 ptAmount, uint256 lpTokens
     );
 
     /// @notice Emitted when liquidity is removed from YieldForge market
@@ -92,11 +86,7 @@ contract YieldForgeMarketFacet {
     );
 
     /// @notice Emitted when first LP sets initial price
-    event YieldForgeMarketActivated(
-        bytes32 indexed poolId,
-        uint256 indexed cycleId,
-        uint256 initialDiscountBps
-    );
+    event YieldForgeMarketActivated(bytes32 indexed poolId, uint256 indexed cycleId, uint256 initialDiscountBps);
 
     /// @notice Emitted when market reserves change (liquidity add/remove/swap)
     event MarketReservesUpdated(
@@ -119,8 +109,7 @@ contract YieldForgeMarketFacet {
 
     /// @notice Market not in expected status
     error InvalidMarketStatus(
-        LibAppStorage.YieldForgeMarketStatus expected,
-        LibAppStorage.YieldForgeMarketStatus actual
+        LibAppStorage.YieldForgeMarketStatus expected, LibAppStorage.YieldForgeMarketStatus actual
     );
 
     /// @notice Market is expired (after maturity)
@@ -155,10 +144,7 @@ contract YieldForgeMarketFacet {
      * @param decimals Token decimals (e.g., 6 for USDT)
      * @return Scaled amount in 18 decimals
      */
-    function _scaleUp(
-        uint256 amount,
-        uint8 decimals
-    ) private pure returns (uint256) {
+    function _scaleUp(uint256 amount, uint8 decimals) private pure returns (uint256) {
         if (decimals >= 18) return amount;
         return amount * (10 ** (18 - decimals));
     }
@@ -170,10 +156,7 @@ contract YieldForgeMarketFacet {
      * @param decimals Token decimals (e.g., 6 for USDT)
      * @return Scaled amount in native decimals
      */
-    function _scaleDown(
-        uint256 amount,
-        uint8 decimals
-    ) private pure returns (uint256) {
+    function _scaleDown(uint256 amount, uint8 decimals) private pure returns (uint256) {
         if (decimals >= 18) return amount;
         return amount / (10 ** (18 - decimals));
     }
@@ -209,11 +192,10 @@ contract YieldForgeMarketFacet {
      * // Subsequent LP deposits (uses current price)
      * addYieldForgeLiquidity(poolId, 500e18, 0);
      */
-    function addYieldForgeLiquidity(
-        bytes32 poolId,
-        uint256 ptAmount,
-        uint256 initialDiscountBps
-    ) external returns (uint256 lpTokens) {
+    function addYieldForgeLiquidity(bytes32 poolId, uint256 ptAmount, uint256 initialDiscountBps)
+        external
+        returns (uint256 lpTokens)
+    {
         // ===== SECURITY CHECKS =====
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
@@ -236,9 +218,7 @@ contract YieldForgeMarketFacet {
             revert MarketExpired(poolId, cycleId);
         }
 
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         // Get PT token
         address ptToken = cycle.ptToken;
@@ -247,9 +227,8 @@ contract YieldForgeMarketFacet {
         IERC20(ptToken).safeTransferFrom(msg.sender, address(this), ptAmount);
 
         // Check if this is first LP or market was emptied (needs re-pricing)
-        bool needsInitialPricing = market.status ==
-            LibAppStorage.YieldForgeMarketStatus.PENDING ||
-            market.totalLpShares == 0;
+        bool needsInitialPricing =
+            market.status == LibAppStorage.YieldForgeMarketStatus.PENDING || market.totalLpShares == 0;
 
         if (needsInitialPricing) {
             // First LP or re-activation after all liquidity withdrawn - set price via discount
@@ -260,8 +239,7 @@ contract YieldForgeMarketFacet {
 
             uint256 virtualQuote;
             // Calculate initial LP tokens (all in 18 decimals)
-            (lpTokens, virtualQuote) = LibYieldForgeMarket
-                .calculateInitialLpTokens(ptAmount, initialDiscountBps);
+            (lpTokens, virtualQuote) = LibYieldForgeMarket.calculateInitialLpTokens(ptAmount, initialDiscountBps);
 
             // Update market state
             market.status = LibAppStorage.YieldForgeMarketStatus.ACTIVE;
@@ -286,19 +264,12 @@ contract YieldForgeMarketFacet {
             s.yieldForgeLpBalances[poolId][cycleId][msg.sender] = lpTokens;
 
             emit YieldForgeMarketActivated(poolId, cycleId, initialDiscountBps);
-        } else if (
-            market.status == LibAppStorage.YieldForgeMarketStatus.ACTIVE
-        ) {
+        } else if (market.status == LibAppStorage.YieldForgeMarketStatus.ACTIVE) {
             // Subsequent LP - use current price (discount ignored)
-            lpTokens = LibYieldForgeMarket.calculateSubsequentLpTokens(
-                ptAmount,
-                market.ptReserve,
-                market.totalLpShares
-            );
+            lpTokens = LibYieldForgeMarket.calculateSubsequentLpTokens(ptAmount, market.ptReserve, market.totalLpShares);
 
             // Calculate proportional virtual quote to maintain price
-            uint256 additionalVirtualQuote = (ptAmount *
-                market.virtualQuoteReserve) / market.ptReserve;
+            uint256 additionalVirtualQuote = (ptAmount * market.virtualQuoteReserve) / market.ptReserve;
 
             // Update market state
             market.ptReserve += ptAmount;
@@ -308,27 +279,12 @@ contract YieldForgeMarketFacet {
             // Mint LP tokens to user
             s.yieldForgeLpBalances[poolId][cycleId][msg.sender] += lpTokens;
         } else {
-            revert InvalidMarketStatus(
-                LibAppStorage.YieldForgeMarketStatus.ACTIVE,
-                market.status
-            );
+            revert InvalidMarketStatus(LibAppStorage.YieldForgeMarketStatus.ACTIVE, market.status);
         }
 
-        emit YieldForgeLiquidityAdded(
-            poolId,
-            cycleId,
-            msg.sender,
-            ptAmount,
-            lpTokens
-        );
+        emit YieldForgeLiquidityAdded(poolId, cycleId, msg.sender, ptAmount, lpTokens);
 
-        emit MarketReservesUpdated(
-            poolId,
-            cycleId,
-            market.ptReserve,
-            market.realQuoteReserve,
-            market.totalLpShares
-        );
+        emit MarketReservesUpdated(poolId, cycleId, market.ptReserve, market.realQuoteReserve, market.totalLpShares);
 
         // ===== REENTRANCY GUARD EXIT =====
         LibReentrancyGuard._nonReentrantAfter();
@@ -352,10 +308,10 @@ contract YieldForgeMarketFacet {
      * @custom:example
      * removeYieldForgeLiquidity(poolId, 100e18);
      */
-    function removeYieldForgeLiquidity(
-        bytes32 poolId,
-        uint256 lpTokens
-    ) external returns (uint256 ptAmount, uint256 quoteAmount) {
+    function removeYieldForgeLiquidity(bytes32 poolId, uint256 lpTokens)
+        external
+        returns (uint256 ptAmount, uint256 quoteAmount)
+    {
         // ===== SECURITY CHECKS =====
         LibReentrancyGuard._nonReentrantBefore();
 
@@ -371,14 +327,10 @@ contract YieldForgeMarketFacet {
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
 
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         // Validate user has enough LP tokens
-        uint256 userLpBalance = s.yieldForgeLpBalances[poolId][cycleId][
-            msg.sender
-        ];
+        uint256 userLpBalance = s.yieldForgeLpBalances[poolId][cycleId][msg.sender];
         if (userLpBalance < lpTokens) {
             revert InsufficientLpBalance(lpTokens, userLpBalance);
         }
@@ -400,24 +352,20 @@ contract YieldForgeMarketFacet {
 
         // Quote fees (accumulatedFeesQuote) are already included in realQuoteReserve
         // so we only track them for proper state accounting, not for transfer
-        uint256 quoteFeeShare = (lpShare * market.accumulatedFeesQuote) /
-            totalShares;
+        uint256 quoteFeeShare = (lpShare * market.accumulatedFeesQuote) / totalShares;
 
         // Total PT includes fee share (PT fees are separate from reserve)
         ptAmount += ptFeeShare;
         // quoteAmount already includes fees via realQuoteReserve - no addition needed
 
         // Calculate proportional virtual quote reduction
-        uint256 virtualQuoteReduction = (lpShare * market.virtualQuoteReserve) /
-            totalShares;
+        uint256 virtualQuoteReduction = (lpShare * market.virtualQuoteReserve) / totalShares;
 
         // Update state BEFORE transfer (CEI pattern)
         s.yieldForgeLpBalances[poolId][cycleId][msg.sender] -= lpTokens;
         market.totalLpShares -= lpTokens;
         market.ptReserve -= (lpShare * market.ptReserve) / totalShares; // Original amount, not including fees
-        market.realQuoteReserve -=
-            (lpShare * market.realQuoteReserve) /
-            totalShares;
+        market.realQuoteReserve -= (lpShare * market.realQuoteReserve) / totalShares;
         market.virtualQuoteReserve -= virtualQuoteReduction;
         market.accumulatedFeesPT -= ptFeeShare;
         market.accumulatedFeesQuote -= quoteFeeShare;
@@ -433,22 +381,9 @@ contract YieldForgeMarketFacet {
             IERC20(pool.quoteToken).safeTransfer(msg.sender, quoteAmount);
         }
 
-        emit YieldForgeLiquidityRemoved(
-            poolId,
-            cycleId,
-            msg.sender,
-            lpTokens,
-            ptAmount,
-            quoteAmount
-        );
+        emit YieldForgeLiquidityRemoved(poolId, cycleId, msg.sender, lpTokens, ptAmount, quoteAmount);
 
-        emit MarketReservesUpdated(
-            poolId,
-            cycleId,
-            market.ptReserve,
-            market.realQuoteReserve,
-            market.totalLpShares
-        );
+        emit MarketReservesUpdated(poolId, cycleId, market.ptReserve, market.realQuoteReserve, market.totalLpShares);
 
         // ===== REENTRANCY GUARD EXIT =====
         LibReentrancyGuard._nonReentrantAfter();
@@ -481,11 +416,10 @@ contract YieldForgeMarketFacet {
      * // Swap 100 USDC for PT with 1% slippage tolerance
      * swapExactQuoteForPT(poolId, 100e6, 99e18);
      */
-    function swapExactQuoteForPT(
-        bytes32 poolId,
-        uint256 quoteAmountIn,
-        uint256 minPtOut
-    ) external returns (uint256 ptOut) {
+    function swapExactQuoteForPT(bytes32 poolId, uint256 quoteAmountIn, uint256 minPtOut)
+        external
+        returns (uint256 ptOut)
+    {
         // ===== SECURITY CHECKS =====
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
@@ -501,16 +435,11 @@ contract YieldForgeMarketFacet {
 
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         // Validate market is active
         if (market.status != LibAppStorage.YieldForgeMarketStatus.ACTIVE) {
-            revert InvalidMarketStatus(
-                LibAppStorage.YieldForgeMarketStatus.ACTIVE,
-                market.status
-            );
+            revert InvalidMarketStatus(LibAppStorage.YieldForgeMarketStatus.ACTIVE, market.status);
         }
 
         // Check not expired
@@ -529,12 +458,8 @@ contract YieldForgeMarketFacet {
 
         // Calculate output: quote → PT (all 18 decimals)
         uint256 feeAmount18;
-        (ptOut, feeAmount18) = LibYieldForgeMarket.getAmountOut(
-            quoteIn18,
-            market.virtualQuoteReserve,
-            market.ptReserve,
-            feeBps
-        );
+        (ptOut, feeAmount18) =
+            LibYieldForgeMarket.getAmountOut(quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps);
 
         // Slippage check
         if (ptOut < minPtOut) {
@@ -542,17 +467,11 @@ contract YieldForgeMarketFacet {
         }
 
         // Split fee (18 decimals)
-        (uint256 lpFee18, uint256 protocolFee18) = LibYieldForgeMarket.splitFee(
-            feeAmount18
-        );
+        (uint256 lpFee18, uint256 protocolFee18) = LibYieldForgeMarket.splitFee(feeAmount18);
 
         // Transfer quote from user (native decimals)
         address quoteToken = pool.quoteToken;
-        IERC20(quoteToken).safeTransferFrom(
-            msg.sender,
-            address(this),
-            quoteAmountIn
-        );
+        IERC20(quoteToken).safeTransferFrom(msg.sender, address(this), quoteAmountIn);
 
         // Update reserves (all 18 decimals internally)
         market.virtualQuoteReserve += (quoteIn18 - feeAmount18);
@@ -561,17 +480,13 @@ contract YieldForgeMarketFacet {
 
         // Track real quote tokens staying in contract (native decimals)
         // quoteAmountIn - protocolFee (in native decimals)
-        uint256 realQuoteStaying = quoteAmountIn -
-            _scaleDown(protocolFee18, pool.quoteDecimals);
+        uint256 realQuoteStaying = quoteAmountIn - _scaleDown(protocolFee18, pool.quoteDecimals);
         market.realQuoteReserve += realQuoteStaying;
 
         // Scale down protocol fee for actual transfer
         uint256 protocolFee = _scaleDown(protocolFee18, pool.quoteDecimals);
         if (protocolFee > 0) {
-            IERC20(quoteToken).safeTransfer(
-                s.protocolFeeRecipient,
-                protocolFee
-            );
+            IERC20(quoteToken).safeTransfer(s.protocolFeeRecipient, protocolFee);
         }
 
         // Transfer PT to user (already 18 decimals)
@@ -587,13 +502,7 @@ contract YieldForgeMarketFacet {
             0
         );
 
-        emit MarketReservesUpdated(
-            poolId,
-            cycleId,
-            market.ptReserve,
-            market.realQuoteReserve,
-            market.totalLpShares
-        );
+        emit MarketReservesUpdated(poolId, cycleId, market.ptReserve, market.realQuoteReserve, market.totalLpShares);
 
         // ===== REENTRANCY GUARD EXIT =====
         LibReentrancyGuard._nonReentrantAfter();
@@ -612,11 +521,10 @@ contract YieldForgeMarketFacet {
      * // Swap 100 PT for USDC with 1% slippage tolerance
      * swapExactPTForQuote(poolId, 100e18, 95e6);
      */
-    function swapExactPTForQuote(
-        bytes32 poolId,
-        uint256 ptAmountIn,
-        uint256 minQuoteOut
-    ) external returns (uint256 quoteOut) {
+    function swapExactPTForQuote(bytes32 poolId, uint256 ptAmountIn, uint256 minQuoteOut)
+        external
+        returns (uint256 quoteOut)
+    {
         // ===== SECURITY CHECKS =====
         LibPause.requireNotPaused();
         LibReentrancyGuard._nonReentrantBefore();
@@ -632,16 +540,11 @@ contract YieldForgeMarketFacet {
 
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         // Validate market is active
         if (market.status != LibAppStorage.YieldForgeMarketStatus.ACTIVE) {
-            revert InvalidMarketStatus(
-                LibAppStorage.YieldForgeMarketStatus.ACTIVE,
-                market.status
-            );
+            revert InvalidMarketStatus(LibAppStorage.YieldForgeMarketStatus.ACTIVE, market.status);
         }
 
         // Check not expired
@@ -658,12 +561,7 @@ contract YieldForgeMarketFacet {
         uint256 feeAmount18;
         uint256 quoteOut18;
         (quoteOut18, feeAmount18) = LibYieldForgeMarket.getAmountOutPtToQuote(
-            ptAmountIn,
-            market.ptReserve,
-            market.virtualQuoteReserve,
-            feeBps,
-            market.createdAt,
-            cycle.maturityDate
+            ptAmountIn, market.ptReserve, market.virtualQuoteReserve, feeBps, market.createdAt, cycle.maturityDate
         );
 
         // Scale down quote output for slippage check and transfer
@@ -675,16 +573,10 @@ contract YieldForgeMarketFacet {
         }
 
         // Split fee (fee is in PT terms, stays 18 decimals)
-        (uint256 lpFee, uint256 protocolFee) = LibYieldForgeMarket.splitFee(
-            feeAmount18
-        );
+        (uint256 lpFee, uint256 protocolFee) = LibYieldForgeMarket.splitFee(feeAmount18);
 
         // Transfer PT from user
-        IERC20(cycle.ptToken).safeTransferFrom(
-            msg.sender,
-            address(this),
-            ptAmountIn
-        );
+        IERC20(cycle.ptToken).safeTransferFrom(msg.sender, address(this), ptAmountIn);
 
         // Update reserves (all 18 decimals)
         market.ptReserve += (ptAmountIn - feeAmount18);
@@ -693,19 +585,13 @@ contract YieldForgeMarketFacet {
 
         // Deduct real quote tokens leaving the contract (native decimals)
         if (market.realQuoteReserve < quoteOut) {
-            revert InsufficientQuoteLiquidity(
-                quoteOut,
-                market.realQuoteReserve
-            );
+            revert InsufficientQuoteLiquidity(quoteOut, market.realQuoteReserve);
         }
         market.realQuoteReserve -= quoteOut;
 
         // Transfer protocol fee (in PT) to recipient
         if (protocolFee > 0) {
-            IERC20(cycle.ptToken).safeTransfer(
-                s.protocolFeeRecipient,
-                protocolFee
-            );
+            IERC20(cycle.ptToken).safeTransfer(s.protocolFeeRecipient, protocolFee);
         }
 
         // Transfer quote to user (native decimals)
@@ -721,13 +607,7 @@ contract YieldForgeMarketFacet {
             quoteOut // Native decimals for correct display
         );
 
-        emit MarketReservesUpdated(
-            poolId,
-            cycleId,
-            market.ptReserve,
-            market.realQuoteReserve,
-            market.totalLpShares
-        );
+        emit MarketReservesUpdated(poolId, cycleId, market.ptReserve, market.realQuoteReserve, market.totalLpShares);
 
         // ===== REENTRANCY GUARD EXIT =====
         LibReentrancyGuard._nonReentrantAfter();
@@ -748,9 +628,7 @@ contract YieldForgeMarketFacet {
      * @return accumulatedFeesPT Accumulated fees in PT
      * @return accumulatedFeesQuote Accumulated fees in quote
      */
-    function getYieldForgeMarketInfo(
-        bytes32 poolId
-    )
+    function getYieldForgeMarketInfo(bytes32 poolId)
         external
         view
         returns (
@@ -765,9 +643,7 @@ contract YieldForgeMarketFacet {
     {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256 cycleId = s.currentCycleId[poolId];
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         return (
             market.status,
@@ -788,16 +664,15 @@ contract YieldForgeMarketFacet {
      * @return ptOut Expected PT output (18 decimals)
      * @return feeBps Current swap fee
      */
-    function previewSwapQuoteForPT(
-        bytes32 poolId,
-        uint256 quoteIn
-    ) external view returns (uint256 ptOut, uint256 feeBps) {
+    function previewSwapQuoteForPT(bytes32 poolId, uint256 quoteIn)
+        external
+        view
+        returns (uint256 ptOut, uint256 feeBps)
+    {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         // Scale quote input to 18 decimals for AMM calculation
         uint256 quoteIn18 = _scaleUp(quoteIn, s.pools[poolId].quoteDecimals);
@@ -805,13 +680,8 @@ contract YieldForgeMarketFacet {
         feeBps = LibYieldForgeMarket.getSwapFeeBps(cycle.maturityDate);
 
         // Use time-aware pricing for accurate preview
-        (ptOut, ) = LibYieldForgeMarket.getAmountOutQuoteToPt(
-            quoteIn18,
-            market.virtualQuoteReserve,
-            market.ptReserve,
-            feeBps,
-            market.createdAt,
-            cycle.maturityDate
+        (ptOut,) = LibYieldForgeMarket.getAmountOutQuoteToPt(
+            quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps, market.createdAt, cycle.maturityDate
         );
     }
 
@@ -823,28 +693,22 @@ contract YieldForgeMarketFacet {
      * @return quoteOut Expected quote output (native decimals, e.g. 1e6 for USDT)
      * @return feeBps Current swap fee
      */
-    function previewSwapPTForQuote(
-        bytes32 poolId,
-        uint256 ptIn
-    ) external view returns (uint256 quoteOut, uint256 feeBps) {
+    function previewSwapPTForQuote(bytes32 poolId, uint256 ptIn)
+        external
+        view
+        returns (uint256 quoteOut, uint256 feeBps)
+    {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         feeBps = LibYieldForgeMarket.getSwapFeeBps(cycle.maturityDate);
 
         // Use time-aware pricing for accurate preview
         uint256 quoteOut18;
-        (quoteOut18, ) = LibYieldForgeMarket.getAmountOutPtToQuote(
-            ptIn,
-            market.ptReserve,
-            market.virtualQuoteReserve,
-            feeBps,
-            market.createdAt,
-            cycle.maturityDate
+        (quoteOut18,) = LibYieldForgeMarket.getAmountOutPtToQuote(
+            ptIn, market.ptReserve, market.virtualQuoteReserve, feeBps, market.createdAt, cycle.maturityDate
         );
 
         // Scale down to native decimals for user
@@ -858,24 +722,16 @@ contract YieldForgeMarketFacet {
      * @param poolId Pool identifier
      * @return priceBps PT price (e.g., 9500 = 0.95 = 5% discount)
      */
-    function getPtPrice(
-        bytes32 poolId
-    ) external view returns (uint256 priceBps) {
+    function getPtPrice(bytes32 poolId) external view returns (uint256 priceBps) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         // Use time-aware effective price
-        return
-            LibYieldForgeMarket.getEffectivePtPriceBps(
-                market.ptReserve,
-                market.virtualQuoteReserve,
-                market.createdAt,
-                cycle.maturityDate
-            );
+        return LibYieldForgeMarket.getEffectivePtPriceBps(
+            market.ptReserve, market.virtualQuoteReserve, market.createdAt, cycle.maturityDate
+        );
     }
 
     /**
@@ -884,10 +740,7 @@ contract YieldForgeMarketFacet {
      * @param user User address
      * @return lpBalance User's LP token balance
      */
-    function getUserLpBalance(
-        bytes32 poolId,
-        address user
-    ) external view returns (uint256 lpBalance) {
+    function getUserLpBalance(bytes32 poolId, address user) external view returns (uint256 lpBalance) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256 cycleId = s.currentCycleId[poolId];
         return s.yieldForgeLpBalances[poolId][cycleId][user];
@@ -898,9 +751,7 @@ contract YieldForgeMarketFacet {
      * @param poolId Pool identifier
      * @return feeBps Current fee in basis points
      */
-    function getCurrentSwapFee(
-        bytes32 poolId
-    ) external view returns (uint256 feeBps) {
+    function getCurrentSwapFee(bytes32 poolId) external view returns (uint256 feeBps) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
@@ -917,10 +768,7 @@ contract YieldForgeMarketFacet {
      * @return ptAmount PT tokens the user can withdraw
      * @return quoteAmount Quote tokens the user can withdraw (native decimals)
      */
-    function getLpPositionValue(
-        bytes32 poolId,
-        address user
-    )
+    function getLpPositionValue(bytes32 poolId, address user)
         external
         view
         returns (uint256 lpBalance, uint256 ptAmount, uint256 quoteAmount)
@@ -928,9 +776,7 @@ contract YieldForgeMarketFacet {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256 cycleId = s.currentCycleId[poolId];
         LibAppStorage.PoolInfo storage pool = s.pools[poolId];
-        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[
-            poolId
-        ][cycleId];
+        LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
         lpBalance = s.yieldForgeLpBalances[poolId][cycleId][user];
 
@@ -942,14 +788,12 @@ contract YieldForgeMarketFacet {
 
         // Calculate proportional share of PT reserve + fees
         ptAmount = (lpBalance * market.ptReserve) / totalShares;
-        uint256 ptFeeShare = (lpBalance * market.accumulatedFeesPT) /
-            totalShares;
+        uint256 ptFeeShare = (lpBalance * market.accumulatedFeesPT) / totalShares;
         ptAmount += ptFeeShare;
 
         // Calculate proportional share of real quote reserve + fees
         quoteAmount = (lpBalance * market.realQuoteReserve) / totalShares;
-        uint256 quoteFeeShare = (lpBalance * market.accumulatedFeesQuote) /
-            totalShares;
+        uint256 quoteFeeShare = (lpBalance * market.accumulatedFeesQuote) / totalShares;
         // quoteFeeShare is in 18 decimals, scale to native
         quoteAmount += _scaleDown(quoteFeeShare, pool.quoteDecimals);
     }
