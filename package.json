@@ -1,0 +1,33 @@
+{
+  "name": "@yield-forge/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:gas": "forge test --gas-report",
+    "deploy": "dotenv -- sh -c 'forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL --broadcast -vvvv'",
+    "deploy:dry": "dotenv -- sh -c 'forge script script/Deploy.s.sol:Deploy --rpc-url $RPC_URL -vvvv'",
+    "deploy:adapters": "dotenv -- sh -c 'forge script script/DeployAdapters.s.sol:DeployAdapters --rpc-url $RPC_URL --broadcast -vvvv'",
+    "deploy:configuration": "dotenv -- sh -c 'forge script script/ApplyConfiguration.s.sol:ApplyConfiguration --rpc-url $RPC_URL --broadcast -vvvv'",
+    "deploy:configuration:dry": "dotenv -v DRY_RUN=true -- sh -c 'forge script script/ApplyConfiguration.s.sol:ApplyConfiguration --rpc-url $RPC_URL -vvvv'",
+    "facet:upgrade": "dotenv -- sh -c 'forge script script/Upgrade.s.sol:Upgrade --rpc-url $RPC_URL --broadcast -vvvv'",
+    "facet:upgrade:dry": "dotenv -- sh -c 'forge script script/Upgrade.s.sol:Upgrade --rpc-url $RPC_URL -vvvv'",
+    "admin:approve-adapter": "dotenv -- sh -c 'forge script script/ApproveAdapter.s.sol:ApproveAdapter --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address)\" $1' _",
+    "admin:approve-quote-token": "dotenv -- sh -c 'forge script script/ApproveQuoteToken.s.sol:ApproveQuoteToken --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address)\" $1' _",
+    "admin:register-pool": "dotenv -- sh -c 'forge script script/RegisterPool.s.sol:RegisterPool --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address,bytes,address)\" $1 $2 $3' _",
+    "dev:mint-tokens": "./dev-scripts/mint-tokens.sh"
+  },
+  "exports": {
+    "./deployments/*.json": "./deployments/*.json",
+    "./abi/*": "./out/*.sol/*.json"
+  },
+  "files": [
+    "deployments",
+    "out"
+  ],
+  "packageManager": "pnpm@10.25.0+sha512.5e82639027af37cf832061bcc6d639c219634488e0f2baebe785028a793de7b525ffcd3f7ff574f5e9860654e098fe852ba8ac5dd5cefe1767d23a020a92f501",
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0"
+  }
+}
