@@ -79,6 +79,10 @@ contract YTOrderbookFacet {
     /// @notice Taker fee in basis points (0.3%)
     uint256 public constant TAKER_FEE_BPS = 30;
 
+    /// @notice Maximum orders to sweep in a single market order
+    /// @dev Prevents unbounded gas consumption in marketBuy/marketSell
+    uint256 public constant MAX_MARKET_ORDER_SWEEPS = 50;
+
     // ============================================================
     //                         STRUCTS
     // ============================================================
@@ -560,6 +564,63 @@ contract YTOrderbookFacet {
     }
 
     // ============================================================
+    //                     ORDER CLEANUP
+    // ============================================================
+
+    /// @notice Emitted when dead orders are cleaned up
+    event OrdersCleanedUp(bytes32 indexed poolId, uint256 removedCount);
+
+    /**
+     * @notice Remove inactive/expired/filled orders from the pool's order list
+     * @dev Permissionless — anyone can call to keep the orderbook healthy.
+     *      Compacts the ytOrdersByPool array by removing dead entries.
+     *
+     * @param poolId Pool identifier
+     * @param maxIterations Maximum entries to scan (0 = scan all)
+     * @return removedCount Number of dead entries removed
+     */
+    function cleanupOrders(bytes32 poolId, uint256 maxIterations) external returns (uint256 removedCount) {
+        LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
+        uint256[] storage orderIds = s.ytOrdersByPool[poolId];
+
+        uint256 len = orderIds.length;
+        uint256 iterations = maxIterations == 0 ? len : (maxIterations < len ? maxIterations : len);
+
+        uint256 writeIdx = 0;
+        uint256 readIdx = 0;
+
+        // Compact array: copy live entries forward, skip dead ones
+        for (; readIdx < iterations; readIdx++) {
+            LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[readIdx]];
+            bool isDead = !order.isActive || order.filledAmount >= order.ytAmount || block.timestamp >= order.expiresAt;
+
+            if (!isDead) {
+                if (writeIdx != readIdx) {
+                    orderIds[writeIdx] = orderIds[readIdx];
+                }
+                writeIdx++;
+            }
+        }
+
+        // If we didn't scan the full array, copy remaining entries as-is
+        for (; readIdx < len; readIdx++) {
+            if (writeIdx != readIdx) {
+                orderIds[writeIdx] = orderIds[readIdx];
+            }
+            writeIdx++;
+        }
+
+        // Remove trailing entries
+        removedCount = len - writeIdx;
+        if (removedCount > 0) {
+            for (uint256 i = 0; i < removedCount; i++) {
+                orderIds.pop();
+            }
+            emit OrdersCleanedUp(poolId, removedCount);
+        }
+    }
+
+    // ============================================================
     //                      MARKET ORDERS
     // ============================================================
 
@@ -575,7 +636,7 @@ contract YTOrderbookFacet {
     /**
      * @notice Market buy - sweep sell orders from best price
      * @dev Fills multiple sell orders starting from lowest price until ytAmount is filled.
-     *      Uses maxQuote as slippage protection.
+     *      Uses maxQuote as slippage protection. Sweeps at most MAX_MARKET_ORDER_SWEEPS orders.
      *
      * @param poolId     Pool identifier
      * @param cycleId    Cycle identifier
@@ -612,70 +673,22 @@ contract YTOrderbookFacet {
             revert CycleMatured(poolId, cycleId);
         }
 
-        // Get all active sell orders for this pool/cycle, sorted by price (ascending)
+        // Get best sell orders, capped at MAX_MARKET_ORDER_SWEEPS
         uint256[] memory sortedOrderIds = _getSortedSellOrders(poolId, cycleId);
 
         uint256 remainingYT = ytAmount;
         uint256 totalQuoteSpent = 0;
 
         for (uint256 i = 0; i < sortedOrderIds.length && remainingYT > 0; i++) {
-            LibAppStorage.YTOrder storage order = s.ytOrders[sortedOrderIds[i]];
+            (uint256 filled, uint256 spent) =
+                _executeSellOrderFill(s, sortedOrderIds[i], remainingYT, maxQuote - totalQuoteSpent, pool, cycle);
 
-            // Skip if order is not valid
-            if (!order.isActive || order.maker == msg.sender || block.timestamp >= order.expiresAt) {
-                continue;
-            }
+            if (filled == 0) continue;
 
-            uint256 orderRemaining = order.ytAmount - order.filledAmount;
-            uint256 fillAmount = remainingYT < orderRemaining ? remainingYT : orderRemaining;
+            remainingYT -= filled;
+            totalQuoteSpent += spent;
 
-            // Calculate quote cost
-            uint256 quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
-            if (quoteAmount == 0) continue;
-
-            // Calculate fee
-            uint256 takerFee = (quoteAmount * TAKER_FEE_BPS) / BPS_DENOMINATOR;
-            uint256 makerReceives = quoteAmount - takerFee;
-
-            // Check slippage before transfer
-            if (totalQuoteSpent + quoteAmount > maxQuote) {
-                // Try partial fill to stay under maxQuote
-                uint256 remainingBudget = maxQuote - totalQuoteSpent;
-                if (remainingBudget == 0) break;
-
-                // Recalculate fillAmount from remaining budget
-                fillAmount = (remainingBudget * 1e18) / order.pricePerYt;
-                if (fillAmount == 0) break;
-
-                quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
-                takerFee = (quoteAmount * TAKER_FEE_BPS) / BPS_DENOMINATOR;
-                makerReceives = quoteAmount - takerFee;
-            }
-
-            // Transfer quote from taker
-            IERC20(pool.quoteToken).safeTransferFrom(msg.sender, address(this), quoteAmount);
-
-            // Pay maker
-            IERC20(pool.quoteToken).safeTransfer(order.maker, makerReceives);
-
-            // Send fee to protocol
-            if (takerFee > 0) {
-                IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
-            }
-
-            // Transfer YT from maker to taker
-            IERC20(cycle.ytToken).safeTransferFrom(order.maker, msg.sender, fillAmount);
-
-            // Update order state
-            order.filledAmount += fillAmount;
-            if (order.filledAmount == order.ytAmount) {
-                order.isActive = false;
-            }
-
-            emit OrderFilled(order.id, msg.sender, poolId, cycleId, order.maker, fillAmount, quoteAmount, takerFee);
-
-            remainingYT -= fillAmount;
-            totalQuoteSpent += quoteAmount;
+            if (totalQuoteSpent >= maxQuote) break;
         }
 
         // Check if we filled enough
@@ -690,7 +703,7 @@ contract YTOrderbookFacet {
     /**
      * @notice Market sell - sweep buy orders from best price
      * @dev Fills multiple buy orders starting from highest price until ytAmount is filled.
-     *      Uses minQuote as slippage protection.
+     *      Uses minQuote as slippage protection. Sweeps at most MAX_MARKET_ORDER_SWEEPS orders.
      *
      * @param poolId     Pool identifier
      * @param cycleId    Cycle identifier
@@ -727,54 +740,19 @@ contract YTOrderbookFacet {
             revert CycleMatured(poolId, cycleId);
         }
 
-        // Get all active buy orders for this pool/cycle, sorted by price (descending)
+        // Get best buy orders, capped at MAX_MARKET_ORDER_SWEEPS
         uint256[] memory sortedOrderIds = _getSortedBuyOrders(poolId, cycleId);
 
         uint256 remainingYT = ytAmount;
         uint256 totalQuoteReceived = 0;
 
         for (uint256 i = 0; i < sortedOrderIds.length && remainingYT > 0; i++) {
-            LibAppStorage.YTOrder storage order = s.ytOrders[sortedOrderIds[i]];
+            (uint256 filled, uint256 received) = _executeBuyOrderFill(s, sortedOrderIds[i], remainingYT, pool, cycle);
 
-            // Skip if order is not valid
-            if (!order.isActive || order.maker == msg.sender || block.timestamp >= order.expiresAt) {
-                continue;
-            }
+            if (filled == 0) continue;
 
-            uint256 orderRemaining = order.ytAmount - order.filledAmount;
-            uint256 fillAmount = remainingYT < orderRemaining ? remainingYT : orderRemaining;
-
-            // Calculate quote from escrow
-            uint256 quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
-            if (quoteAmount == 0) continue;
-
-            // Calculate fee
-            uint256 takerFee = (quoteAmount * TAKER_FEE_BPS) / BPS_DENOMINATOR;
-            uint256 takerReceives = quoteAmount - takerFee;
-
-            // Transfer YT from taker to maker
-            IERC20(cycle.ytToken).safeTransferFrom(msg.sender, order.maker, fillAmount);
-
-            // Release escrowed quote to taker
-            IERC20(pool.quoteToken).safeTransfer(msg.sender, takerReceives);
-
-            // Send fee to protocol
-            if (takerFee > 0) {
-                IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
-            }
-
-            // Update order state and escrow
-            order.filledAmount += fillAmount;
-            s.ytOrderEscrow[order.id] -= quoteAmount;
-
-            if (order.filledAmount == order.ytAmount) {
-                order.isActive = false;
-            }
-
-            emit OrderFilled(order.id, msg.sender, poolId, cycleId, order.maker, fillAmount, quoteAmount, takerFee);
-
-            remainingYT -= fillAmount;
-            totalQuoteReceived += takerReceives;
+            remainingYT -= filled;
+            totalQuoteReceived += received;
         }
 
         // Check if we filled enough
@@ -792,46 +770,171 @@ contract YTOrderbookFacet {
     }
 
     /**
+     * @notice Internal: execute a single sell order fill for marketBuy
+     * @return filled YT amount filled
+     * @return spent Quote amount spent
+     */
+    function _executeSellOrderFill(
+        LibAppStorage.AppStorage storage s,
+        uint256 orderId,
+        uint256 maxYT,
+        uint256 budgetRemaining,
+        LibAppStorage.PoolInfo storage pool,
+        LibAppStorage.CycleInfo storage cycle
+    ) internal returns (uint256 filled, uint256 spent) {
+        LibAppStorage.YTOrder storage order = s.ytOrders[orderId];
+
+        // Skip if order is not valid
+        if (!order.isActive || order.maker == msg.sender || block.timestamp >= order.expiresAt) {
+            return (0, 0);
+        }
+
+        uint256 orderRemaining = order.ytAmount - order.filledAmount;
+        uint256 fillAmount = maxYT < orderRemaining ? maxYT : orderRemaining;
+
+        // Calculate quote cost
+        uint256 quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
+        if (quoteAmount == 0) return (0, 0);
+
+        // Check budget
+        if (quoteAmount > budgetRemaining) {
+            // Try partial fill to stay under budget
+            if (budgetRemaining == 0) return (0, 0);
+            fillAmount = (budgetRemaining * 1e18) / order.pricePerYt;
+            if (fillAmount == 0) return (0, 0);
+            quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
+        }
+
+        // Calculate fee
+        uint256 takerFee = (quoteAmount * TAKER_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 makerReceives = quoteAmount - takerFee;
+
+        // Transfer quote from taker
+        IERC20(pool.quoteToken).safeTransferFrom(msg.sender, address(this), quoteAmount);
+        IERC20(pool.quoteToken).safeTransfer(order.maker, makerReceives);
+        if (takerFee > 0) {
+            IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
+        }
+
+        // Transfer YT from maker to taker
+        IERC20(cycle.ytToken).safeTransferFrom(order.maker, msg.sender, fillAmount);
+
+        // Update order state
+        order.filledAmount += fillAmount;
+        if (order.filledAmount == order.ytAmount) {
+            order.isActive = false;
+        }
+
+        emit OrderFilled(
+            order.id, msg.sender, order.poolId, order.cycleId, order.maker, fillAmount, quoteAmount, takerFee
+        );
+
+        return (fillAmount, quoteAmount);
+    }
+
+    /**
+     * @notice Internal: execute a single buy order fill for marketSell
+     * @return filled YT amount filled
+     * @return received Quote amount received by taker
+     */
+    function _executeBuyOrderFill(
+        LibAppStorage.AppStorage storage s,
+        uint256 orderId,
+        uint256 maxYT,
+        LibAppStorage.PoolInfo storage pool,
+        LibAppStorage.CycleInfo storage cycle
+    ) internal returns (uint256 filled, uint256 received) {
+        LibAppStorage.YTOrder storage order = s.ytOrders[orderId];
+
+        // Skip if order is not valid
+        if (!order.isActive || order.maker == msg.sender || block.timestamp >= order.expiresAt) {
+            return (0, 0);
+        }
+
+        uint256 orderRemaining = order.ytAmount - order.filledAmount;
+        uint256 fillAmount = maxYT < orderRemaining ? maxYT : orderRemaining;
+
+        // Calculate quote from escrow
+        uint256 quoteAmount = (fillAmount * order.pricePerYt) / 1e18;
+        if (quoteAmount == 0) return (0, 0);
+
+        // Calculate fee
+        uint256 takerFee = (quoteAmount * TAKER_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 takerReceives = quoteAmount - takerFee;
+
+        // Transfer YT from taker to maker
+        IERC20(cycle.ytToken).safeTransferFrom(msg.sender, order.maker, fillAmount);
+
+        // Release escrowed quote to taker
+        IERC20(pool.quoteToken).safeTransfer(msg.sender, takerReceives);
+        if (takerFee > 0) {
+            IERC20(pool.quoteToken).safeTransfer(s.protocolFeeRecipient, takerFee);
+        }
+
+        // Update order state and escrow
+        order.filledAmount += fillAmount;
+        s.ytOrderEscrow[order.id] -= quoteAmount;
+        if (order.filledAmount == order.ytAmount) {
+            order.isActive = false;
+        }
+
+        emit OrderFilled(
+            order.id, msg.sender, order.poolId, order.cycleId, order.maker, fillAmount, quoteAmount, takerFee
+        );
+
+        return (fillAmount, takerReceives);
+    }
+
+    /**
      * @notice Get sorted sell orders (ascending by price - best first)
-     * @dev Internal helper for marketBuy
+     * @dev Internal helper for marketBuy. Capped at MAX_MARKET_ORDER_SWEEPS
+     *      to prevent unbounded gas consumption. Uses insertion sort which
+     *      is efficient for small arrays and has O(n*k) complexity where
+     *      k = min(valid_orders, MAX_MARKET_ORDER_SWEEPS).
      */
     function _getSortedSellOrders(bytes32 poolId, uint256 cycleId) internal view returns (uint256[] memory) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256[] storage orderIds = s.ytOrdersByPool[poolId];
+        uint256 maxResults = MAX_MARKET_ORDER_SWEEPS;
 
-        // First pass: count valid sell orders
+        // Single pass: collect valid sell orders up to maxResults, keeping sorted by price ascending
+        uint256[] memory result = new uint256[](maxResults);
         uint256 count = 0;
+
         for (uint256 i = 0; i < orderIds.length; i++) {
             LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
             if (
                 order.isActive && order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
                     && block.timestamp < order.expiresAt
             ) {
-                count++;
-            }
-        }
+                uint256 price = order.pricePerYt;
+                uint256 orderId = orderIds[i];
 
-        // Collect valid orders
-        uint256[] memory result = new uint256[](count);
-        uint256 idx = 0;
-        for (uint256 i = 0; i < orderIds.length && idx < count; i++) {
-            LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
-            if (
-                order.isActive && order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
-                    && block.timestamp < order.expiresAt
-            ) {
-                result[idx++] = orderIds[i];
-            }
-        }
-
-        // Sort by price ascending (bubble sort - fine for small arrays)
-        for (uint256 i = 0; i < result.length; i++) {
-            for (uint256 j = i + 1; j < result.length; j++) {
-                if (s.ytOrders[result[i]].pricePerYt > s.ytOrders[result[j]].pricePerYt) {
-                    uint256 temp = result[i];
-                    result[i] = result[j];
-                    result[j] = temp;
+                if (count < maxResults) {
+                    // Array not full yet — insert in sorted position
+                    uint256 pos = count;
+                    while (pos > 0 && s.ytOrders[result[pos - 1]].pricePerYt > price) {
+                        result[pos] = result[pos - 1];
+                        pos--;
+                    }
+                    result[pos] = orderId;
+                    count++;
+                } else if (price < s.ytOrders[result[count - 1]].pricePerYt) {
+                    // Array full but this order has a better price than the worst — replace and re-sort
+                    uint256 pos = count - 1;
+                    while (pos > 0 && s.ytOrders[result[pos - 1]].pricePerYt > price) {
+                        result[pos] = result[pos - 1];
+                        pos--;
+                    }
+                    result[pos] = orderId;
                 }
+            }
+        }
+
+        // Trim to actual count
+        if (count < maxResults) {
+            assembly {
+                mstore(result, count)
             }
         }
 
@@ -840,45 +943,52 @@ contract YTOrderbookFacet {
 
     /**
      * @notice Get sorted buy orders (descending by price - best first)
-     * @dev Internal helper for marketSell
+     * @dev Internal helper for marketSell. Capped at MAX_MARKET_ORDER_SWEEPS
+     *      to prevent unbounded gas consumption.
      */
     function _getSortedBuyOrders(bytes32 poolId, uint256 cycleId) internal view returns (uint256[] memory) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
         uint256[] storage orderIds = s.ytOrdersByPool[poolId];
+        uint256 maxResults = MAX_MARKET_ORDER_SWEEPS;
 
-        // First pass: count valid buy orders
+        // Single pass: collect valid buy orders up to maxResults, keeping sorted by price descending
+        uint256[] memory result = new uint256[](maxResults);
         uint256 count = 0;
+
         for (uint256 i = 0; i < orderIds.length; i++) {
             LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
             if (
                 order.isActive && !order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
                     && block.timestamp < order.expiresAt
             ) {
-                count++;
-            }
-        }
+                uint256 price = order.pricePerYt;
+                uint256 orderId = orderIds[i];
 
-        // Collect valid orders
-        uint256[] memory result = new uint256[](count);
-        uint256 idx = 0;
-        for (uint256 i = 0; i < orderIds.length && idx < count; i++) {
-            LibAppStorage.YTOrder storage order = s.ytOrders[orderIds[i]];
-            if (
-                order.isActive && !order.isSellOrder && order.cycleId == cycleId && order.filledAmount < order.ytAmount
-                    && block.timestamp < order.expiresAt
-            ) {
-                result[idx++] = orderIds[i];
-            }
-        }
-
-        // Sort by price descending (bubble sort - fine for small arrays)
-        for (uint256 i = 0; i < result.length; i++) {
-            for (uint256 j = i + 1; j < result.length; j++) {
-                if (s.ytOrders[result[i]].pricePerYt < s.ytOrders[result[j]].pricePerYt) {
-                    uint256 temp = result[i];
-                    result[i] = result[j];
-                    result[j] = temp;
+                if (count < maxResults) {
+                    // Array not full yet — insert in sorted position (descending)
+                    uint256 pos = count;
+                    while (pos > 0 && s.ytOrders[result[pos - 1]].pricePerYt < price) {
+                        result[pos] = result[pos - 1];
+                        pos--;
+                    }
+                    result[pos] = orderId;
+                    count++;
+                } else if (price > s.ytOrders[result[count - 1]].pricePerYt) {
+                    // Array full but this order has a better price than the worst — replace and re-sort
+                    uint256 pos = count - 1;
+                    while (pos > 0 && s.ytOrders[result[pos - 1]].pricePerYt < price) {
+                        result[pos] = result[pos - 1];
+                        pos--;
+                    }
+                    result[pos] = orderId;
                 }
+            }
+        }
+
+        // Trim to actual count
+        if (count < maxResults) {
+            assembly {
+                mstore(result, count)
             }
         }
 

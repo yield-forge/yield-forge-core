@@ -457,9 +457,11 @@ contract YieldForgeMarketFacet {
         uint256 quoteIn18 = _scaleUp(quoteAmountIn, pool.quoteDecimals);
 
         // Calculate output: quote → PT (all 18 decimals)
+        // Uses time-aware pricing so PT price converges to parity at maturity
         uint256 feeAmount18;
-        (ptOut, feeAmount18) =
-            LibYieldForgeMarket.getAmountOut(quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps);
+        (ptOut, feeAmount18) = LibYieldForgeMarket.getAmountOutQuoteToPt(
+            quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps, market.createdAt, cycle.maturityDate
+        );
 
         // Slippage check
         if (ptOut < minPtOut) {
@@ -786,15 +788,16 @@ contract YieldForgeMarketFacet {
 
         uint256 totalShares = market.totalLpShares;
 
-        // Calculate proportional share of PT reserve + fees
+        // Calculate proportional share of PT reserve + accumulated PT fees
+        // (PT fees are tracked separately from ptReserve)
         ptAmount = (lpBalance * market.ptReserve) / totalShares;
         uint256 ptFeeShare = (lpBalance * market.accumulatedFeesPT) / totalShares;
         ptAmount += ptFeeShare;
 
-        // Calculate proportional share of real quote reserve + fees
+        // Calculate proportional share of real quote reserve
+        // Note: Quote LP fees are already included in realQuoteReserve (added during swaps),
+        // so we do NOT add accumulatedFeesQuote here — it's tracked for state accounting only.
+        // This matches the actual withdrawal logic in removeYieldForgeLiquidity().
         quoteAmount = (lpBalance * market.realQuoteReserve) / totalShares;
-        uint256 quoteFeeShare = (lpBalance * market.accumulatedFeesQuote) / totalShares;
-        // quoteFeeShare is in 18 decimals, scale to native
-        quoteAmount += _scaleDown(quoteFeeShare, pool.quoteDecimals);
     }
 }

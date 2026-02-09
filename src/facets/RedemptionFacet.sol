@@ -261,17 +261,18 @@ contract RedemptionFacet {
      * @param poolId Pool identifier
      * @param cycleId Cycle to redeem from
      * @param ptAmount Amount of PT to redeem
+     * @param maxSlippageBps Maximum acceptable slippage in basis points (e.g., 100 = 1%)
      * @return quoteAmount Amount of quoteToken received
      * @return nonQuoteAmount Amount of non-quote token received
      * @return quoteToken Address of the quote token
      * @return nonQuoteToken Address of the non-quote token
      *
      * Example:
-     *   // Redeem PT and know which token is quote
+     *   // Redeem PT with 1% slippage tolerance
      *   (uint256 quote, uint256 other, address quoteAddr, address otherAddr) =
-     *       redemption.redeemPTWithZap(poolId, 1, 100e18);
+     *       redemption.redeemPTWithZap(poolId, 1, 100e18, 100);
      */
-    function redeemPTWithZap(bytes32 poolId, uint256 cycleId, uint256 ptAmount)
+    function redeemPTWithZap(bytes32 poolId, uint256 cycleId, uint256 ptAmount, uint256 maxSlippageBps)
         external
         returns (uint256 quoteAmount, uint256 nonQuoteAmount, address quoteToken, address nonQuoteToken)
     {
@@ -323,7 +324,24 @@ contract RedemptionFacet {
 
         ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
 
+        // ===== PREVIEW EXPECTED AMOUNTS =====
+        (uint256 expectedAmount0, uint256 expectedAmount1) =
+            adapter.previewRemoveLiquidity(liquidityToRemove, pool.poolParams);
+
+        // Calculate minimum amounts based on slippage
+        uint256 minAmount0 = (expectedAmount0 * (10000 - maxSlippageBps)) / 10000;
+        uint256 minAmount1 = (expectedAmount1 * (10000 - maxSlippageBps)) / 10000;
+
+        // ===== REMOVE LIQUIDITY =====
         (uint256 amount0, uint256 amount1) = adapter.removeLiquidity(liquidityToRemove, pool.poolParams);
+
+        // ===== SLIPPAGE CHECK =====
+        if (amount0 < minAmount0) {
+            revert SlippageExceeded(minAmount0, amount0);
+        }
+        if (amount1 < minAmount1) {
+            revert SlippageExceeded(minAmount1, amount1);
+        }
 
         // ===== UPDATE CYCLE STATE =====
 
