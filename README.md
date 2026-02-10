@@ -1,5 +1,7 @@
 # Yield Forge
 
+> **WARNING:** These contracts have not completed a full security audit and are currently undergoing one. Use at your own risk. Do not deposit funds you cannot afford to lose.
+
 Yield tokenization protocol built with the Diamond pattern (EIP-2535).
 
 ## Overview
