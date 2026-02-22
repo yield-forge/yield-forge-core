@@ -432,7 +432,7 @@ contract MockAdapter is ILiquidityAdapter {
         token1 = _token1;
     }
 
-    function addLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
+    function addLiquidity(bytes calldata, uint256, uint256) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 
@@ -469,7 +469,7 @@ contract MockAdapter is ILiquidityAdapter {
     }
 
     // New interface stubs
-    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata, uint256, uint256) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 

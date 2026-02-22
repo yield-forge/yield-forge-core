@@ -225,15 +225,13 @@ contract LiquidityFacet {
             IERC20(pool.token1).safeIncreaseAllowance(pool.adapter, amount1);
         }
 
-        // NOTE: adapterParams encoding handled by _encodeAdapterParams()
-
         // Add liquidity via adapter
         uint128 liquidityReceived;
         uint256 amount0Used;
         uint256 amount1Used;
 
         (liquidityReceived, amount0Used, amount1Used) =
-            adapter.addLiquidity(_encodeAdapterParams(pool.poolParams, amount0, amount1));
+            adapter.addLiquidity(pool.poolParams, amount0, amount1);
 
         liquidity = uint256(liquidityReceived);
 
@@ -401,30 +399,6 @@ contract LiquidityFacet {
         market.createdAt = block.timestamp;
 
         emit NewCycleStarted(poolId, newCycleId, block.timestamp, maturityDate, address(pt), address(yt));
-    }
-
-    /**
-     * @notice Encode parameters for adapter call
-     * @dev Different adapters expect different param formats
-     *
-     * This function decodes the stored poolParams and re-encodes
-     * with the amount values for the addLiquidity call.
-     *
-     * @param poolParams Stored pool parameters
-     * @param amount0 Token0 amount
-     * @param amount1 Token1 amount
-     * @return Encoded params for adapter
-     */
-    function _encodeAdapterParams(bytes memory poolParams, uint256 amount0, uint256 amount1)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        // Concatenate poolParams with encoded amounts
-        // This produces the format adapters expect:
-        // - V4: (PoolKey, uint256, uint256)
-        // - V3: (address, uint256, uint256)
-        return bytes.concat(poolParams, abi.encode(amount0, amount1));
     }
 
     /**
@@ -600,9 +574,8 @@ contract LiquidityFacet {
         if (pool.adapter == address(0)) revert PoolDoesNotExist(poolId);
 
         ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
-        bytes memory adapterParams = _encodeAdapterPreviewParams(pool.poolParams, amount0, amount1);
 
-        (, uint256 a0Used, uint256 a1Used) = adapter.previewAddLiquidity(adapterParams);
+        (, uint256 a0Used, uint256 a1Used) = adapter.previewAddLiquidity(pool.poolParams, amount0, amount1);
 
         amount0Used = a0Used;
         amount1Used = a1Used;
@@ -649,18 +622,6 @@ contract LiquidityFacet {
 
         ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
         amount0 = adapter.calculateOptimalAmount0(amount1, pool.poolParams);
-    }
-
-    /**
-     * @notice Encode adapter params for preview
-     * @dev Same encoding as _encodeAdapterParams
-     */
-    function _encodeAdapterPreviewParams(bytes memory poolParams, uint256 amount0, uint256 amount1)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return bytes.concat(poolParams, abi.encode(amount0, amount1));
     }
 
     /**

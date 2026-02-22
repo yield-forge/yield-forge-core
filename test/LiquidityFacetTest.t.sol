@@ -342,21 +342,11 @@ contract MockAdapterWithLiquidity is ILiquidityAdapter {
         diamond = _diamond;
     }
 
-    function addLiquidity(bytes calldata params)
+    function addLiquidity(bytes calldata, uint256 amount0, uint256 amount1)
         external
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        // Params are bytes.concat(poolParams, abi.encode(amount0, amount1))
-        // amounts are the last 64 bytes
-        uint256 amount0;
-        uint256 amount1;
-        assembly {
-            let len := params.length
-            amount1 := calldataload(add(params.offset, sub(len, 32)))
-            amount0 := calldataload(add(params.offset, sub(len, 64)))
-        }
-
         // Simulate using 50% of provided amounts
         amount0Used = amount0 / 2;
         amount1Used = amount1 / 2;
@@ -402,7 +392,7 @@ contract MockAdapterWithLiquidity is ILiquidityAdapter {
     }
 
     // New interface stubs
-    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata, uint256, uint256) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 

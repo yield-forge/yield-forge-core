@@ -22,11 +22,11 @@ contract UniswapV3AdapterTest is Test {
     }
 
     function test_V3Adapter_OnlyDiamondCanAddLiquidity() public {
-        bytes memory params = abi.encode(address(0xABC), uint256(100e18), uint256(100e18));
+        bytes memory poolParams = abi.encode(address(0xABC));
 
         vm.prank(attacker);
         vm.expectRevert();
-        v3Adapter.addLiquidity(params);
+        v3Adapter.addLiquidity(poolParams, 100e18, 100e18);
     }
 
     function test_V3Adapter_OnlyDiamondCanRemoveLiquidity() public {
@@ -77,11 +77,11 @@ contract UniswapV4AdapterTest is Test {
     }
 
     function test_V4Adapter_OnlyDiamondCanAddLiquidity() public {
-        bytes memory params = abi.encode(new bytes(0), uint256(0), uint256(0));
+        bytes memory poolParams = abi.encode(new bytes(0));
 
         vm.prank(attacker);
         vm.expectRevert();
-        v4Adapter.addLiquidity(params);
+        v4Adapter.addLiquidity(poolParams, 0, 0);
     }
 
     function test_V4Adapter_OnlyDiamondCanRemoveLiquidity() public {

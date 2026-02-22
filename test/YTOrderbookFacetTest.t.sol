@@ -911,7 +911,7 @@ contract MockOrderbookAdapter is ILiquidityAdapter {
         diamond = _diamond;
     }
 
-    function addLiquidity(bytes calldata)
+    function addLiquidity(bytes calldata, uint256, uint256)
         external
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
@@ -957,7 +957,7 @@ contract MockOrderbookAdapter is ILiquidityAdapter {
         return address(this);
     }
 
-    function previewAddLiquidity(bytes calldata) external pure override returns (uint128, uint256, uint256) {
+    function previewAddLiquidity(bytes calldata, uint256, uint256) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
     }
 

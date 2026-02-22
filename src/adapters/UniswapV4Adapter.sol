@@ -180,20 +180,21 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      *
      * IMPORTANT: Diamond must approve tokens to this adapter before calling
      *
-     * @param params Encoded PoolKey and token amounts
-     *               abi.encode(PoolKey poolKey, uint256 amount0, uint256 amount1)
+     * @param poolParams Encoded PoolKey: abi.encode(PoolKey poolKey)
+     * @param amount0 Amount of token0 to deposit
+     * @param amount1 Amount of token1 to deposit
      * @return liquidity Amount of LP units created
      * @return amount0Used Actual token0 deposited
      * @return amount1Used Actual token1 deposited
      */
-    function addLiquidity(bytes calldata params)
+    function addLiquidity(bytes calldata poolParams, uint256 amount0, uint256 amount1)
         external
         override
         onlyDiamond
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
         // Decode parameters
-        (PoolKey memory poolKey, uint256 amount0, uint256 amount1) = abi.decode(params, (PoolKey, uint256, uint256));
+        PoolKey memory poolKey = abi.decode(poolParams, (PoolKey));
 
         // Transfer tokens from Diamond to this adapter
         // Diamond has already approved these tokens to this adapter
@@ -635,15 +636,17 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     /**
      * @notice Preview liquidity and amounts for adding liquidity
      * @dev Calculates expected liquidity and actual token usage
-     * @param params Encoded (PoolKey, amount0, amount1)
+     * @param poolParams Encoded PoolKey: abi.encode(PoolKey poolKey)
+     * @param amount0 Amount of token0 to deposit
+     * @param amount1 Amount of token1 to deposit
      */
-    function previewAddLiquidity(bytes calldata params)
+    function previewAddLiquidity(bytes calldata poolParams, uint256 amount0, uint256 amount1)
         external
         view
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        (PoolKey memory poolKey, uint256 amount0, uint256 amount1) = abi.decode(params, (PoolKey, uint256, uint256));
+        PoolKey memory poolKey = abi.decode(poolParams, (PoolKey));
 
         // Get current pool price
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());

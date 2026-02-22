@@ -103,18 +103,19 @@ interface ILiquidityAdapter {
      * 2. Approve tokens for the adapter (or underlying protocol)
      *
      * The adapter is responsible for:
-     * 1. Decoding params to get protocol-specific data
+     * 1. Decoding poolParams to get protocol-specific data
      * 2. Calling the underlying protocol to add liquidity
      * 3. Returning unused tokens to the Diamond (for refund to user)
      *
-     * @param params Encoded parameters specific to this adapter
-     *               See adapter implementation for exact encoding
+     * @param poolParams Encoded pool identifier (e.g. PoolKey for V4, address for V3)
+     * @param amount0 Amount of token0 to deposit
+     * @param amount1 Amount of token1 to deposit
      * @return liquidity Amount of LP units created (protocol-specific meaning)
      *                   For Uniswap: liquidity in the mathematical sense
      * @return amount0Used Actual amount of token0 deposited into the pool
      * @return amount1Used Actual amount of token1 deposited into the pool
      */
-    function addLiquidity(bytes calldata params)
+    function addLiquidity(bytes calldata poolParams, uint256 amount0, uint256 amount1)
         external
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used);
 
@@ -201,13 +202,14 @@ interface ILiquidityAdapter {
      *
      * Uses current pool price to calculate optimal amounts
      *
-     * @param params Encoded pool parameters + token amounts
-     *               Format: abi.encode(poolKey, amount0, amount1) for Uniswap
+     * @param poolParams Encoded pool identifier (e.g. PoolKey for V4, address for V3)
+     * @param amount0 Amount of token0 to deposit
+     * @param amount1 Amount of token1 to deposit
      * @return liquidity Expected LP units to be created
      * @return amount0Used Actual amount of token0 that will be deposited
      * @return amount1Used Actual amount of token1 that will be deposited
      */
-    function previewAddLiquidity(bytes calldata params)
+    function previewAddLiquidity(bytes calldata poolParams, uint256 amount0, uint256 amount1)
         external
         view
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used);

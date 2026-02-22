@@ -276,20 +276,21 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * 1. Transfer tokens to this adapter before calling
      * 2. This adapter must have approved positionManager for tokens
      *
-     * @param params Encoded as abi.encode(address pool, uint256 amount0, uint256 amount1)
-     *               If tokenId exists in poolToTokenId, it will be used
+     * @param poolParams Encoded pool address: abi.encode(address pool)
+     * @param amount0 Amount of token0 to deposit
+     * @param amount1 Amount of token1 to deposit
      * @return liquidity LP units created
      * @return amount0Used Actual token0 used
      * @return amount1Used Actual token1 used
      */
-    function addLiquidity(bytes calldata params)
+    function addLiquidity(bytes calldata poolParams, uint256 amount0, uint256 amount1)
         external
         override
         onlyDiamond
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
         // Decode parameters
-        (address pool, uint256 amount0, uint256 amount1) = abi.decode(params, (address, uint256, uint256));
+        address pool = abi.decode(poolParams, (address));
 
         // Get pool info
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
@@ -593,15 +594,17 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     /**
      * @notice Preview liquidity and amounts for adding liquidity
      * @dev Uses LiquidityAmounts to calculate exact liquidity and token usage
-     * @param params Encoded (pool, amount0, amount1)
+     * @param poolParams Encoded pool address: abi.encode(address pool)
+     * @param amount0 Amount of token0 to deposit
+     * @param amount1 Amount of token1 to deposit
      */
-    function previewAddLiquidity(bytes calldata params)
+    function previewAddLiquidity(bytes calldata poolParams, uint256 amount0, uint256 amount1)
         external
         view
         override
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        (address pool, uint256 amount0, uint256 amount1) = abi.decode(params, (address, uint256, uint256));
+        address pool = abi.decode(poolParams, (address));
 
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
         (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
