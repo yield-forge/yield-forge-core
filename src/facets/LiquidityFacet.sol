@@ -16,7 +16,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  * @title LiquidityFacet
  * @author Yield Forge Team
  * @notice Manages liquidity addition and automatic cycle creation
- * @dev Works with any liquidity adapter (V4, V3, Curve, etc.)
+ * @dev Works with any liquidity adapter (V4, V3, etc.)
  *
  * ARCHITECTURE OVERVIEW:
  * ----------------------
@@ -366,8 +366,7 @@ contract LiquidityFacet {
         );
 
         // Store cycle info
-        // Note: tickLower/tickUpper are only used by Uniswap adapters
-        // For Curve, they remain 0
+        // Note: tickLower/tickUpper are set by Uniswap adapters
         LibAppStorage.CycleInfo storage newCycle = s.cycles[poolId][newCycleId];
         newCycle.cycleId = newCycleId;
         newCycle.startTimestamp = block.timestamp;
@@ -425,7 +424,6 @@ contract LiquidityFacet {
         // This produces the format adapters expect:
         // - V4: (PoolKey, uint256, uint256)
         // - V3: (address, uint256, uint256)
-        // - Curve: (address, address, uint256, uint256)
         return bytes.concat(poolParams, abi.encode(amount0, amount1));
     }
 
