@@ -16,17 +16,18 @@
     "admin:approve-adapter": "dotenv -- sh -c 'forge script script/ApproveAdapter.s.sol:ApproveAdapter --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address)\" $1' _",
     "admin:approve-quote-token": "dotenv -- sh -c 'forge script script/ApproveQuoteToken.s.sol:ApproveQuoteToken --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address)\" $1' _",
     "admin:register-pool": "dotenv -- sh -c 'forge script script/RegisterPool.s.sol:RegisterPool --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address,bytes,address)\" $1 $2 $3' _",
-    "dev:mint-tokens": "./dev-scripts/mint-tokens.sh"
+    "dev:mint-tokens": "./dev-scripts/mint-tokens.sh",
+    "export:abi": "node scripts/export-abi.js"
   },
   "exports": {
     "./deployments/*.json": "./deployments/*.json",
     "./config/*.json": "./config/*.json",
-    "./abi/*": "./out/*.sol/*.json"
+    "./abi/*": "./abi/*.json"
   },
   "files": [
     "deployments",
     "config",
-    "out"
+    "abi"
   ],
   "packageManager": "pnpm@10.25.0+sha512.5e82639027af37cf832061bcc6d639c219634488e0f2baebe785028a793de7b525ffcd3f7ff574f5e9860654e098fe852ba8ac5dd5cefe1767d23a020a92f501",
   "devDependencies": {
