@@ -4,6 +4,9 @@ pragma solidity ^0.8.26;
 import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {TickMath} from "v4-core/libraries/TickMath.sol";
+import {SqrtPriceMath} from "v4-core/libraries/SqrtPriceMath.sol";
+import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 
 // Note: Uniswap V3 interfaces are defined locally because v3-periphery
 // has OpenZeppelin version conflicts (uses OZ 3.x, we use OZ 5.x).
@@ -102,6 +105,19 @@ interface IUniswapV3Pool {
     function fee() external view returns (uint24);
 
     function tickSpacing() external view returns (int24);
+
+    function slot0()
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            uint8 feeProtocol,
+            bool unlocked
+        );
 }
 
 /**
@@ -286,6 +302,14 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
         int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
 
+        // Transfer tokens from Diamond to this adapter
+        if (amount0 > 0) {
+            IERC20(token0).safeTransferFrom(diamond, address(this), amount0);
+        }
+        if (amount1 > 0) {
+            IERC20(token1).safeTransferFrom(diamond, address(this), amount1);
+        }
+
         // Approve tokens to position manager
         IERC20(token0).safeIncreaseAllowance(address(positionManager), amount0);
         IERC20(token1).safeIncreaseAllowance(address(positionManager), amount1);
@@ -341,8 +365,8 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
         if (tokenId == 0) revert PositionNotFound();
 
-        // Decrease liquidity
-        (amount0, amount1) = positionManager.decreaseLiquidity(
+        // Decrease liquidity — returns amounts owed (not yet withdrawn)
+        (uint256 decreased0, uint256 decreased1) = positionManager.decreaseLiquidity(
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: tokenId,
                 liquidity: liquidity,
@@ -352,10 +376,13 @@ contract UniswapV3Adapter is ILiquidityAdapter {
             })
         );
 
-        // Collect tokens (includes the decreased liquidity + any accumulated fees)
+        // Collect only the decreased amounts (NOT accumulated fees — those belong to YT holders)
         (amount0, amount1) = positionManager.collect(
             INonfungiblePositionManager.CollectParams({
-                tokenId: tokenId, recipient: diamond, amount0Max: MAX_UINT128, amount1Max: MAX_UINT128
+                tokenId: tokenId,
+                recipient: diamond,
+                amount0Max: uint128(decreased0),
+                amount1Max: uint128(decreased1)
             })
         );
 
@@ -490,8 +517,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
     /**
      * @notice Preview token amounts for removing liquidity
-     * @dev For V3, we estimate based on position's share of total liquidity
-     *      This is an approximation - actual amounts depend on current price
+     * @dev Uses LiquidityAmounts to calculate amounts based on current price and full range ticks
      *
      * @param liquidity Amount of LP units to remove
      * @param params Encoded pool address
@@ -509,19 +535,17 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
         if (tokenId == 0) return (0, 0);
 
-        // Get current position info
-        (,,,,,,, uint128 positionLiquidity,,,,) = positionManager.positions(tokenId);
-
-        if (positionLiquidity == 0) return (0, 0);
-
-        // Get pool balances as rough estimate
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
-        uint256 balance0 = IERC20(v3Pool.token0()).balanceOf(pool);
-        uint256 balance1 = IERC20(v3Pool.token1()).balanceOf(pool);
+        (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
+        int24 tickSpacing = v3Pool.tickSpacing();
 
-        // Estimate based on liquidity proportion
-        amount0 = (balance0 * liquidity) / positionLiquidity;
-        amount1 = (balance1 * liquidity) / positionLiquidity;
+        int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
+        int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
+
+        uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
+
+        (amount0, amount1) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity);
     }
 
     /**
@@ -568,7 +592,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
     /**
      * @notice Preview liquidity and amounts for adding liquidity
-     * @dev For V3, we call the pool to estimate. This is an approximation.
+     * @dev Uses LiquidityAmounts to calculate exact liquidity and token usage
      * @param params Encoded (pool, amount0, amount1)
      */
     function previewAddLiquidity(bytes calldata params)
@@ -579,42 +603,24 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     {
         (address pool, uint256 amount0, uint256 amount1) = abi.decode(params, (address, uint256, uint256));
 
-        // For V3, estimation is complex without on-chain LiquidityAmounts library
-        // We return a simplified estimate based on the smaller proportional amount
-
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
-        uint256 balance0 = IERC20(v3Pool.token0()).balanceOf(pool);
-        uint256 balance1 = IERC20(v3Pool.token1()).balanceOf(pool);
+        (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
+        int24 tickSpacing = v3Pool.tickSpacing();
 
-        if (balance0 == 0 || balance1 == 0) {
-            // First liquidity - use amounts as-is
-            amount0Used = amount0;
-            amount1Used = amount1;
-            // Simple estimation: geometric mean as liquidity proxy
-            liquidity = uint128(_sqrt(amount0 * amount1));
-        } else {
-            // Calculate proportional amounts based on pool reserves
-            uint256 amount1Optimal = (amount0 * balance1) / balance0;
+        int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
+        int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
 
-            if (amount1Optimal <= amount1) {
-                // amount0 is the limiting factor
-                amount0Used = amount0;
-                amount1Used = amount1Optimal;
-            } else {
-                // amount1 is the limiting factor
-                uint256 amount0Optimal = (amount1 * balance0) / balance1;
-                amount0Used = amount0Optimal;
-                amount1Used = amount1;
-            }
+        uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
-            // Estimate liquidity as geometric mean of used amounts
-            liquidity = uint128(_sqrt(amount0Used * amount1Used));
-        }
+        liquidity = LiquidityAmounts.getLiquidityForAmounts(sqrtPriceX96, sqrtPriceA, sqrtPriceB, amount0, amount1);
+        (amount0Used, amount1Used) =
+            _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity);
     }
 
     /**
      * @notice Calculate optimal amount1 for given amount0
-     * @dev Uses pool reserves ratio
+     * @dev Uses current pool price via LiquidityAmounts
      */
     function calculateOptimalAmount1(uint256 amount0, bytes calldata params)
         external
@@ -624,18 +630,23 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     {
         address pool = abi.decode(params, (address));
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
+        (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
+        int24 tickSpacing = v3Pool.tickSpacing();
 
-        uint256 balance0 = IERC20(v3Pool.token0()).balanceOf(pool);
-        uint256 balance1 = IERC20(v3Pool.token1()).balanceOf(pool);
+        int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
+        int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
 
-        if (balance0 == 0) return 0;
+        uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
-        amount1 = (amount0 * balance1) / balance0;
+        // Get liquidity for amount0 only, then derive matching amount1
+        uint128 liquidity0 = LiquidityAmounts.getLiquidityForAmount0(sqrtPriceX96, sqrtPriceB, amount0);
+        (, amount1) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity0);
     }
 
     /**
      * @notice Calculate optimal amount0 for given amount1
-     * @dev Uses pool reserves ratio
+     * @dev Uses current pool price via LiquidityAmounts
      */
     function calculateOptimalAmount0(uint256 amount1, bytes calldata params)
         external
@@ -645,24 +656,27 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     {
         address pool = abi.decode(params, (address));
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
+        (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
+        int24 tickSpacing = v3Pool.tickSpacing();
 
-        uint256 balance0 = IERC20(v3Pool.token0()).balanceOf(pool);
-        uint256 balance1 = IERC20(v3Pool.token1()).balanceOf(pool);
+        int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
+        int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
 
-        if (balance1 == 0) return 0;
+        uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
-        amount0 = (amount1 * balance0) / balance1;
+        // Get liquidity for amount1 only, then derive matching amount0
+        uint128 liquidity1 = LiquidityAmounts.getLiquidityForAmount1(sqrtPriceA, sqrtPriceX96, amount1);
+        (amount0,) = _getAmountsForLiquidity(sqrtPriceX96, sqrtPriceA, sqrtPriceB, liquidity1);
     }
 
     /**
      * @notice Get current pool price
-     * @dev V3 doesn't expose sqrtPriceX96 in minimal interface, returns 0
+     * @dev Reads sqrtPriceX96 and tick from V3 pool's slot0
      */
-    function getPoolPrice(bytes calldata params) external pure override returns (uint160 sqrtPriceX96, int24 tick) {
-        // Note: Full V3 pool interface needed for slot0
-        // For now, return 0 - UI should handle this gracefully
-        params; // silence unused warning
-        return (0, 0);
+    function getPoolPrice(bytes calldata params) external view override returns (uint160 sqrtPriceX96, int24 tick) {
+        address pool = abi.decode(params, (address));
+        (sqrtPriceX96, tick,,,,,) = IUniswapV3Pool(pool).slot0();
     }
 
     /**
@@ -679,11 +693,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
     /**
      * @notice Get current value of YieldForge position in token amounts
-     * @dev Calculates how much of each token our position is worth at current price
-     *
-     * For V3, we estimate based on the position's share of pool reserves.
-     * This is an approximation since V3 positions can have different tick ranges.
-     * However, since YF uses full-range positions, this gives a reasonable estimate.
+     * @dev Uses LiquidityAmounts to calculate exact amounts based on current price
      *
      * @param params Encoded pool address
      * @return amount0 Value of our position in token0
@@ -695,32 +705,23 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
         if (tokenId == 0) return (0, 0);
 
-        // Get position liquidity
         (,,,,,,, uint128 positionLiquidity,,,,) = positionManager.positions(tokenId);
 
         if (positionLiquidity == 0) return (0, 0);
 
-        // Get pool token balances as the basis for calculation
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
-        uint256 poolBalance0 = IERC20(v3Pool.token0()).balanceOf(pool);
-        uint256 poolBalance1 = IERC20(v3Pool.token1()).balanceOf(pool);
+        (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
+        int24 tickSpacing = v3Pool.tickSpacing();
 
-        // For full-range positions, we estimate proportionally
-        // This is simplified; accurate calculation would require sqrtPriceX96 and tick range
-        // But for our use case (full range), pool balance ratio is a reasonable approximation
+        int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
+        int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
 
-        // Get total pool liquidity for proportion calculation
-        // Since we can't easily get total liquidity in V3 without aggregating all positions,
-        // we estimate based on our position's portion of the pool we can observe
+        uint160 sqrtPriceA = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtPriceB = TickMath.getSqrtPriceAtTick(tickUpper);
 
-        // Simple approach: return proportional share based on position liquidity
-        // This works well for pools where YF is a significant liquidity provider
-        amount0 = poolBalance0 > 0 ? (poolBalance0 * positionLiquidity) / (positionLiquidity + 1e18) : 0;
-        amount1 = poolBalance1 > 0 ? (poolBalance1 * positionLiquidity) / (positionLiquidity + 1e18) : 0;
-
-        // More accurate approach would be to use previewRemoveLiquidity
-        // but that's what we want to avoid. For V3, pool balances work reasonably well.
-        (amount0, amount1) = this.previewRemoveLiquidity(positionLiquidity, params);
+        (amount0, amount1) = _getAmountsForLiquidity(
+            sqrtPriceX96, sqrtPriceA, sqrtPriceB, positionLiquidity
+        );
     }
 
     /**
@@ -745,17 +746,30 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         amount1 = IERC20(v3Pool.token1()).balanceOf(pool);
     }
 
+    // ============================================================
+    //                    INTERNAL FUNCTIONS
+    // ============================================================
+
     /**
-     * @notice Integer square root (Babylonian method)
-     * @dev Used for liquidity estimation
+     * @notice Calculate token amounts for given liquidity
+     * @dev Uses SqrtPriceMath (same math as V4 adapter)
      */
-    function _sqrt(uint256 x) internal pure returns (uint256 y) {
-        if (x == 0) return 0;
-        uint256 z = (x + 1) / 2;
-        y = x;
-        while (z < y) {
-            y = z;
-            z = (x / z + z) / 2;
+    function _getAmountsForLiquidity(uint160 sqrtPriceX96, uint160 sqrtPriceA, uint160 sqrtPriceB, uint128 liquidity)
+        internal
+        pure
+        returns (uint256 amount0, uint256 amount1)
+    {
+        if (sqrtPriceX96 <= sqrtPriceA) {
+            int256 delta0 = SqrtPriceMath.getAmount0Delta(sqrtPriceA, sqrtPriceB, int128(liquidity));
+            amount0 = delta0 > 0 ? uint256(delta0) : uint256(-delta0);
+        } else if (sqrtPriceX96 >= sqrtPriceB) {
+            int256 delta1 = SqrtPriceMath.getAmount1Delta(sqrtPriceA, sqrtPriceB, int128(liquidity));
+            amount1 = delta1 > 0 ? uint256(delta1) : uint256(-delta1);
+        } else {
+            int256 delta0 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, sqrtPriceB, int128(liquidity));
+            int256 delta1 = SqrtPriceMath.getAmount1Delta(sqrtPriceA, sqrtPriceX96, int128(liquidity));
+            amount0 = delta0 > 0 ? uint256(delta0) : uint256(-delta0);
+            amount1 = delta1 > 0 ? uint256(delta1) : uint256(-delta1);
         }
     }
 }

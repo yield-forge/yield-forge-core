@@ -14,6 +14,7 @@ import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SqrtPriceMath} from "v4-core/libraries/SqrtPriceMath.sol";
+import {Position} from "v4-core/libraries/Position.sol";
 
 /**
  * @title UniswapV4Adapter
@@ -516,7 +517,7 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
 
         // Get position info from pool manager
         // Position ID is hash of (owner, tickLower, tickUpper, salt)
-        bytes32 positionKey = keccak256(abi.encodePacked(address(this), tickLower, tickUpper, bytes32(0)));
+        bytes32 positionKey = Position.calculatePositionKey(address(this), tickLower, tickUpper, bytes32(0));
 
         (liquidity,,) = poolManager.getPositionInfo(poolKey.toId(), positionKey);
     }
@@ -604,6 +605,16 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     /// @notice Helper to decode and check pool (used by supportsPool)
     function decodeAndCheckPool(bytes calldata params) external view returns (bool) {
         PoolKey memory poolKey = abi.decode(params, (PoolKey));
+
+        // Only support hookless pools — hooks can return negative deltas
+        // that this adapter does not handle (would cause CurrencyNotSettled revert)
+        if (address(poolKey.hooks) != address(0)) return false;
+
+        // TODO: Add native ETH support (settle{value:}, payable addLiquidity, Diamond msg.value forwarding)
+        // Reject native ETH pools — this adapter uses IERC20.safeTransferFrom which reverts on address(0)
+        if (Currency.unwrap(poolKey.currency0) == address(0) || Currency.unwrap(poolKey.currency1) == address(0)) {
+            return false;
+        }
 
         // Check if pool is initialized by getting slot0
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolKey.toId());
@@ -774,7 +785,7 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
         int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
         int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
 
-        bytes32 positionKey = keccak256(abi.encodePacked(address(this), tickLower, tickUpper, bytes32(0)));
+        bytes32 positionKey = Position.calculatePositionKey(address(this), tickLower, tickUpper, bytes32(0));
 
         (uint128 liquidity,,) = poolManager.getPositionInfo(poolKey.toId(), positionKey);
 
@@ -797,6 +808,11 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
      * Note: V4 pools don't hold tokens directly like V3. Instead, PoolManager
      * holds all tokens. We return the amounts that would be obtained if
      * the pool's total liquidity were removed.
+     *
+     * IMPORTANT: This is an approximation. getLiquidity() returns the total
+     * in-range liquidity, not liquidity across all tick ranges. For pools with
+     * positions at different ranges, the actual TVL may differ. This is acceptable
+     * for YieldForge since we only use full-range positions.
      *
      * @param params Encoded PoolKey
      * @return amount0 Total token0 in the pool
