@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 /**
  * @title ILiquidityAdapter
  * @author Yield Forge Team
- * @notice Interface for liquidity protocol adapters (Uniswap V4, V3, Curve, etc.)
+ * @notice Interface for liquidity protocol adapters (Uniswap V4, V3, etc.)
  * @dev Each adapter implements protocol-specific logic for:
  *      - Adding/removing liquidity
  *      - Collecting yield (swap fees, rewards)
@@ -33,9 +33,6 @@ pragma solidity ^0.8.26;
  *
  * UniswapV3Adapter params:
  *   abi.encode(address pool, int24 tickLower, int24 tickUpper, uint256 amount0, uint256 amount1)
- *
- * CurveAdapter params:
- *   abi.encode(address pool, uint256[] amounts)
  *
  * SECURITY CONSIDERATIONS:
  * ------------------------
@@ -114,7 +111,6 @@ interface ILiquidityAdapter {
      *               See adapter implementation for exact encoding
      * @return liquidity Amount of LP units created (protocol-specific meaning)
      *                   For Uniswap: liquidity in the mathematical sense
-     *                   For Curve: LP token amount
      * @return amount0Used Actual amount of token0 deposited into the pool
      * @return amount1Used Actual amount of token1 deposited into the pool
      */
@@ -145,11 +141,6 @@ interface ILiquidityAdapter {
      *
      * What counts as "yield" depends on the protocol:
      * - Uniswap V3/V4: Accumulated swap fees
-     * - Curve: Trading fees + CRV/other reward tokens
-     *
-     * For multi-token rewards (e.g., Curve with CRV + CVX):
-     * The adapter should swap all rewards to the pool's base tokens
-     * OR return additional reward token amounts separately.
      *
      * @param params Parameters for yield collection (e.g., pool identifier)
      * @return yield0 Amount of token0 collected as yield
@@ -174,11 +165,7 @@ interface ILiquidityAdapter {
      * @notice Get the token addresses for a pool
      * @dev Used during pool registration to store token info
      *
-     * For 2-token pools (Uniswap, most Curve):
-     *   Returns (token0, token1) in sorted order
-     *
-     * For multi-token pools (Curve 3pool):
-     *   Returns the two "primary" tokens or reverts if not applicable
+     * Returns (token0, token1) in sorted order (lower address first for Uniswap)
      *
      * @param params Parameters identifying the pool
      * @return token0 First token address (lower address for Uniswap)
@@ -212,8 +199,7 @@ interface ILiquidityAdapter {
      * - How much liquidity will be created
      * - Actual token amounts that will be used (may differ from input)
      *
-     * For Uniswap pools: uses current price to calculate optimal amounts
-     * For Curve pools: uses pool's internal pricing
+     * Uses current pool price to calculate optimal amounts
      *
      * @param params Encoded pool parameters + token amounts
      *               Format: abi.encode(poolKey, amount0, amount1) for Uniswap
@@ -275,8 +261,6 @@ interface ILiquidityAdapter {
      * Standard identifiers:
      * - "V4" for Uniswap V4
      * - "V3" for Uniswap V3
-     * - "CRV" for Curve
-     * - "BAL" for Balancer (future)
      *
      * @return Protocol identifier string (2-4 characters recommended)
      */
@@ -299,7 +283,6 @@ interface ILiquidityAdapter {
      *      Implementation varies by protocol:
      *      - UniswapV4: Uses getLiquidityForAmounts with current price and our position's liquidity
      *      - UniswapV3: Similar calculation using position's liquidity from NFT
-     *      - Curve: LP tokens staked * virtual_price, then split by pool ratio
      *
      * @param params Pool parameters (same format as other view functions)
      * @return amount0 Value of our position in token0
@@ -315,7 +298,6 @@ interface ILiquidityAdapter {
      *      Implementation varies by protocol:
      *      - UniswapV4: Pool's total liquidity converted to token amounts
      *      - UniswapV3: Token balances held by the pool contract
-     *      - Curve: Token balances in the pool (pool.balances())
      *
      * @param params Pool parameters (same format as other view functions)
      * @return amount0 Total token0 in the pool
@@ -330,7 +312,6 @@ interface ILiquidityAdapter {
      * Examples:
      * - UniswapV4Adapter: PoolManager address
      * - UniswapV3Adapter: NonfungiblePositionManager address
-     * - CurveAdapter: Registry or Factory address
      *
      * @return Address of the main protocol contract
      */

@@ -5,8 +5,6 @@ import "forge-std/Script.sol";
 import {PoolRegistryFacet} from "../src/facets/PoolRegistryFacet.sol";
 import {UniswapV4Adapter} from "../src/adapters/UniswapV4Adapter.sol";
 import {UniswapV3Adapter} from "../src/adapters/UniswapV3Adapter.sol";
-import {CurveAdapter} from "../src/adapters/CurveAdapter.sol";
-
 /**
  * @title DeployAdapters
  * @notice Deploy a specific adapter using per-chain config
@@ -14,7 +12,6 @@ import {CurveAdapter} from "../src/adapters/CurveAdapter.sol";
  *
  *      ADAPTER=UniswapV4Adapter pnpm deploy:adapters
  *      ADAPTER=UniswapV3Adapter pnpm deploy:adapters
- *      ADAPTER=CurveAdapter pnpm deploy:adapters
  *
  * Required env:
  *   PRIVATE_KEY  - Deployer private key
@@ -66,8 +63,6 @@ contract DeployAdapters is Script {
             adapter = _deployV4(config, basePath, diamond);
         } else if (keccak256(bytes(adapterName)) == keccak256("UniswapV3Adapter")) {
             adapter = _deployV3(config, basePath, diamond);
-        } else if (keccak256(bytes(adapterName)) == keccak256("CurveAdapter")) {
-            adapter = _deployCurve(config, basePath, diamond);
         } else {
             revert(string.concat("Unknown adapter: ", adapterName));
         }
@@ -114,17 +109,6 @@ contract DeployAdapters is Script {
 
         UniswapV3Adapter adapter = new UniswapV3Adapter(positionManager, factory, diamond);
         console.log("UniswapV3Adapter deployed at:", address(adapter));
-        return address(adapter);
-    }
-
-    function _deployCurve(string memory config, string memory basePath, address diamond) internal returns (address) {
-        address crvToken = vm.parseJsonAddress(config, string.concat(basePath, ".crvToken"));
-        require(crvToken != address(0), "crvToken not configured");
-
-        console.log("CRV Token:", crvToken);
-
-        CurveAdapter adapter = new CurveAdapter(diamond, crvToken);
-        console.log("CurveAdapter deployed at:", address(adapter));
         return address(adapter);
     }
 

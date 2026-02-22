@@ -523,7 +523,7 @@ event OrderCancelled(uint256 indexed orderId, address indexed maker);
 ```
 User
   │
-  ├── addLiquidity() ──────────► LiquidityFacet ──────► Adapter ──────► Uniswap/Curve
+  ├── addLiquidity() ──────────► LiquidityFacet ──────► Adapter ──────► Uniswap
   │                                    │
   │                                    └── mints ──────► PT + YT
   │

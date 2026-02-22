@@ -72,8 +72,7 @@ config/
   "name": "Ethereum Mainnet",
   "adapters": {
     "UniswapV4Adapter": { "poolManager": "0x..." },
-    "UniswapV3Adapter": { "positionManager": "0x...", "factory": "0x..." },
-    "CurveAdapter": { "crvToken": "0x..." }
+    "UniswapV3Adapter": { "positionManager": "0x...", "factory": "0x..." }
   },
   "quoteTokens": {
     "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",

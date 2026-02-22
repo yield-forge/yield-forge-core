@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Yield Forge is a DeFi protocol that enables **yield tokenization** for liquidity positions across multiple protocols (Uniswap V4, V3, Curve). Inspired by Pendle Finance, it separates yield-bearing positions into two components:
+Yield Forge is a DeFi protocol that enables **yield tokenization** for liquidity positions across multiple protocols (Uniswap V4, V3). Inspired by Pendle Finance, it separates yield-bearing positions into two components:
 
 - **Principal Token (PT)**: Represents the original deposit amount, redeemable at maturity
 - **Yield Token (YT)**: Represents rights to accumulated yield (swap fees) until maturity
@@ -70,7 +70,7 @@ struct AppStorage {
 | **Diamond.sol** | Main proxy contract routing calls to facets |
 | **Facets** | Modular logic components (PoolRegistry, Liquidity, etc.) |
 | **Libraries** | Shared utilities (LibAppStorage, LibYieldForgeMarket) |
-| **Adapters** | Protocol integrations (UniswapV4, V3, Curve) |
+| **Adapters** | Protocol integrations (UniswapV4, V3) |
 | **Tokens** | PT and YT ERC20 implementations |
 | **DiamondTimelock** | Governance timelock for upgrades (48h delay) |
 

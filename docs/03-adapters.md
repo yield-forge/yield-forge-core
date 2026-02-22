@@ -150,14 +150,12 @@ poolManager.modifyLiquidity(poolId, ModifyLiquidityParams({
 
 All adapters implement preview functions for UI integration:
 
-| Function | V4 | V3 | Curve |
-|----------|----|----|-------|
-| `previewAddLiquidity` | ✅ Uses `LiquidityAmounts` library | ✅ Estimation via pool reserves | ✅ Estimation via pool reserves |
-| `calculateOptimalAmount0/1` | ✅ Uses `LiquidityAmounts` | ✅ Reserve ratio | ✅ Reserve ratio |
-| `getPoolPrice` | ✅ Returns `(sqrtPriceX96, tick)` | ⚠️ Returns `(0, 0)` | ⚠️ Returns `(0, 0)` |
-| `getPoolFee` | ✅ Pool fee | ✅ Pool fee | ✅ Curve fee (converted) |
-
-> **Note:** V3 and Curve adapters return `(0, 0)` for `getPoolPrice` due to interface limitations. The UI should handle this gracefully.
+| Function | V4 | V3 |
+|----------|----|----|
+| `previewAddLiquidity` | ✅ Uses `LiquidityAmounts` library | ✅ Uses `LiquidityAmounts` library |
+| `calculateOptimalAmount0/1` | ✅ Uses `LiquidityAmounts` | ✅ Uses `LiquidityAmounts` |
+| `getPoolPrice` | ✅ Returns `(sqrtPriceX96, tick)` | ✅ Returns `(sqrtPriceX96, tick)` via `slot0()` |
+| `getPoolFee` | ✅ Pool fee | ✅ Pool fee |
 
 ---
 
@@ -233,82 +231,6 @@ function removeLiquidity(uint128 liquidity, bytes calldata params) {
     }));
 }
 ```
-
----
-
-## CurveAdapter
-
-**File:** `src/adapters/CurveAdapter.sol`
-
-### Overview
-
-Integrates with Curve StableSwap pools and gauges for CRV rewards.
-
-### Key Characteristics
-
-| Property | Value |
-|----------|-------|
-| Protocol ID | `"CRV"` |
-| Pool Type | 2-token StableSwap |
-| LP Storage | Staked in gauge for CRV rewards |
-| Yield Source | CRV rewards (trading fees are auto-compounded) |
-
-### Parameter Encoding
-
-```solidity
-// poolParams for registration
-bytes memory poolParams = abi.encode(curvePoolAddress, gaugeAddress);
-
-// addLiquidity params
-bytes memory params = abi.encode(curvePool, gauge, amount0, amount1);
-```
-
-### Add Liquidity Flow
-
-```solidity
-function addLiquidity(bytes calldata params) {
-    // 1. Add liquidity to Curve pool
-    uint256 lpReceived = pool.add_liquidity([amount0, amount1], 0);
-    
-    // 2. Stake LP tokens in gauge for CRV rewards
-    gauge.deposit(lpReceived);
-    
-    // 3. Return unused tokens to Diamond
-}
-```
-
-### Remove Liquidity Flow
-
-```solidity
-function removeLiquidity(uint128 liquidity, bytes calldata params) {
-    // 1. Withdraw from gauge
-    gauge.withdraw(liquidity);
-    
-    // 2. Remove liquidity from pool
-    pool.remove_liquidity(liquidity, [0, 0]);
-    
-    // 3. Transfer tokens to Diamond
-}
-```
-
-### Yield Collection
-
-```solidity
-function collectYield(bytes calldata params) {
-    // Claim CRV and other reward tokens from gauge
-    gauge.claim_rewards(diamond);
-    
-    // Note: Trading fees are auto-compounded into LP value
-    // They are captured on remove_liquidity, not here
-}
-```
-
-### Yield Types
-
-| Type | Handling |
-|------|----------|
-| Trading Fees | Auto-compounded into LP token value (captured on redemption) |
-| CRV Rewards | Collected via `claim_rewards()` |
 
 ---
 

@@ -13,7 +13,7 @@ pragma solidity ^0.8.26;
  * Each facet accesses storage via `LibAppStorage.diamondStorage()`.
  *
  * KEY CONCEPTS:
- * 1. Pools - Registered liquidity pools from various protocols (V4, V3, Curve)
+ * 1. Pools - Registered liquidity pools from various protocols (V4, V3)
  * 2. Cycles - Time periods (~90 days) with unique PT/YT tokens
  * 3. Adapters - Protocol-specific implementations for liquidity operations
  * 4. Yield - Accumulated fees/rewards distributed to YT holders
@@ -24,7 +24,6 @@ pragma solidity ^0.8.26;
  * poolId is computed differently per protocol:
  * - Uniswap V4: PoolId from PoolKey
  * - Uniswap V3: keccak256(abi.encode(pool, tickLower, tickUpper))
- * - Curve: keccak256(abi.encode(curvePool, gauge))
  *
  * IMPORTANT: Storage slots are append-only. Never remove or reorder
  * existing fields to maintain upgrade compatibility.
@@ -51,13 +50,12 @@ library LibAppStorage {
      *
      * EXAMPLE poolParams encoding:
      * - V4: abi.encode(PoolKey) - contains currency0, currency1, fee, tickSpacing, hooks
-     * - V3: abi.encode(poolAddress, tickLower, tickUpper)
-     * - Curve: abi.encode(curvePoolAddress, gaugeAddress)
+     * - V3: abi.encode(poolAddress)
      */
     struct PoolInfo {
         /// @notice Address of the liquidity adapter for this pool
         /// @dev Each adapter implements ILiquidityAdapter interface
-        /// Examples: UniswapV4Adapter, UniswapV3Adapter, CurveAdapter
+        /// Examples: UniswapV4Adapter, UniswapV3Adapter
         address adapter;
         /// @notice Protocol-specific pool parameters (encoded)
         /// @dev Decoded by the adapter when performing operations
@@ -136,11 +134,9 @@ library LibAppStorage {
         /// @dev Only one cycle per pool can be active
         /// Set to false when maturityDate passes
         bool isActive;
-        /// @notice Lower tick of full range position (Uniswap only)
-        /// @dev For Curve pools, this is unused (set to 0)
+        /// @notice Lower tick of full range position
         int24 tickLower;
-        /// @notice Upper tick of full range position (Uniswap only)
-        /// @dev For Curve pools, this is unused (set to 0)
+        /// @notice Upper tick of full range position
         int24 tickUpper;
     }
 
@@ -350,7 +346,6 @@ library LibAppStorage {
         /// @dev poolId is protocol-specific:
         ///      V4: PoolId.unwrap(poolKey.toId())
         ///      V3: keccak256(abi.encode(pool, tickLower, tickUpper))
-        ///      Curve: keccak256(abi.encode(pool, gauge))
         mapping(bytes32 => PoolInfo) pools;
         // ============================================================
         //                       CYCLE DATA

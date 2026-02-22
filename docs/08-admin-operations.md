@@ -100,11 +100,6 @@ cast abi-encode \
 cast abi-encode "f(address)" "0xPoolAddress"
 ```
 
-**Curve (Pool + Gauge):**
-```bash
-cast abi-encode "f(address,address)" "0xPool" "0xGauge"
-```
-
 ### Full Example
 
 ```bash

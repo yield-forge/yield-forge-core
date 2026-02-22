@@ -5,8 +5,6 @@ import "forge-std/Script.sol";
 import {PoolRegistryFacet} from "../src/facets/PoolRegistryFacet.sol";
 import {UniswapV4Adapter} from "../src/adapters/UniswapV4Adapter.sol";
 import {UniswapV3Adapter} from "../src/adapters/UniswapV3Adapter.sol";
-import {CurveAdapter} from "../src/adapters/CurveAdapter.sol";
-
 /**
  * @title ApplyConfiguration
  * @notice Synchronizes on-chain state with config file
@@ -30,8 +28,7 @@ import {CurveAdapter} from "../src/adapters/CurveAdapter.sol";
  *   "name": "Ethereum Mainnet",
  *   "adapters": {
  *     "UniswapV4Adapter": { "poolManager": "0x..." },
- *     "UniswapV3Adapter": { "positionManager": "0x...", "factory": "0x..." },
- *     "CurveAdapter": { "crvToken": "0x..." }
+ *     "UniswapV3Adapter": { "positionManager": "0x...", "factory": "0x..." }
  *   },
  *   "quoteTokens": {
  *     "USDC": "0x...",
@@ -189,13 +186,6 @@ contract ApplyConfiguration is Script {
             address positionManager = vm.parseJsonAddress(config, string.concat(basePath, ".positionManager"));
             address factory = vm.parseJsonAddress(config, string.concat(basePath, ".factory"));
             address adapter = address(new UniswapV3Adapter(positionManager, factory, diamond));
-            console.log("  Deployed at:", adapter);
-            return adapter;
-        }
-
-        if (nameHash == keccak256("CurveAdapter")) {
-            address crvToken = vm.parseJsonAddress(config, string.concat(basePath, ".crvToken"));
-            address adapter = address(new CurveAdapter(diamond, crvToken));
             console.log("  Deployed at:", adapter);
             return adapter;
         }

@@ -8,9 +8,6 @@
     "UniswapV3Adapter": {
       "positionManager": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
       "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984"
-    },
-    "CurveAdapter": {
-      "crvToken": "0x11cDb42B0EB46D95f990BeDD4695A6e3fA034978"
     }
   },
   "quoteTokens": {

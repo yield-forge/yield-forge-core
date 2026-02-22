@@ -23,8 +23,6 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
  *   cast abi-encode "f((address,address,uint24,int24,address))" \
  *       "(0xCurrency0,0xCurrency1,3000,60,0xHookAddress)"
  *
- *   # For CurveAdapter (pool address):
- *   cast abi-encode "f(address)" "0xCurvePoolAddress"
  *
  * Environment variables (from .env):
  *   PRIVATE_KEY - Deployer/owner private key
