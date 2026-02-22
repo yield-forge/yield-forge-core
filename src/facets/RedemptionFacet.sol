@@ -14,7 +14,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  * @title RedemptionFacet
  * @author Yield Forge Team
  * @notice Handles PT redemption and token upgrades between cycles
- * @dev Works with any liquidity adapter (V4, V3, Curve, etc.)
+ * @dev Works with any liquidity adapter (V4, V3, etc.)
  *
  * ARCHITECTURE OVERVIEW:
  * ----------------------

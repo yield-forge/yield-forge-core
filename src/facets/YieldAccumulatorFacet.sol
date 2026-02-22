@@ -14,7 +14,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  * @title YieldAccumulatorFacet
  * @author Yield Forge Team
  * @notice Manages yield collection and distribution to YT holders
- * @dev Works with any liquidity adapter (V4, V3, Curve, etc.)
+ * @dev Works with any liquidity adapter (V4, V3, etc.)
  *
  * ARCHITECTURE OVERVIEW:
  * ----------------------

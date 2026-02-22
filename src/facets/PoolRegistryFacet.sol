@@ -247,7 +247,6 @@ contract PoolRegistryFacet {
      *
      * Example:
      *   registry.approveAdapter(uniswapV4Adapter);
-     *   registry.approveAdapter(curveAdapter);
      */
     function approveAdapter(address adapter) external onlyOwner {
         if (adapter == address(0)) revert ZeroAddress();
@@ -378,7 +377,6 @@ contract PoolRegistryFacet {
      * PARAMS ENCODING BY ADAPTER:
      * - UniswapV4Adapter: abi.encode(PoolKey)
      * - UniswapV3Adapter: abi.encode(poolAddress)
-     * - CurveAdapter: abi.encode(curvePool, gauge)
      *
      * Example:
      *   // Register a Uniswap V4 pool with USDT as quote
