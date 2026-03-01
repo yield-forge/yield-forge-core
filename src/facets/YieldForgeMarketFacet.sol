@@ -3,10 +3,13 @@ pragma solidity ^0.8.26;
 
 import {LibAppStorage} from "../libraries/LibAppStorage.sol";
 import {LibYieldForgeMarket} from "../libraries/LibYieldForgeMarket.sol";
+import {LibLiquidity} from "../libraries/LibLiquidity.sol";
 import {LibPause} from "../libraries/LibPause.sol";
 import {LibReentrancyGuard} from "../libraries/LibReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ILiquidityAdapter} from "../interfaces/ILiquidityAdapter.sol";
+import {PrincipalToken} from "../tokens/PrincipalToken.sol";
 
 /**
  * @title YieldForgeMarketFacet
@@ -88,6 +91,9 @@ contract YieldForgeMarketFacet {
     /// @notice Emitted when first LP sets initial price
     event YieldForgeMarketActivated(bytes32 indexed poolId, uint256 indexed cycleId, uint256 initialDiscountBps);
 
+    /// @notice Emitted when maturity target price is updated
+    event MaturityTargetUpdated(bytes32 indexed poolId, uint256 indexed cycleId, uint256 maturityTargetPriceBps);
+
     /// @notice Emitted when market reserves change (liquidity add/remove/swap)
     event MarketReservesUpdated(
         bytes32 indexed poolId,
@@ -136,6 +142,51 @@ contract YieldForgeMarketFacet {
     // ============================================================
     //                   PRIVATE HELPERS
     // ============================================================
+
+    /**
+     * @notice Refresh maturity target price from current LP position value
+     * @dev MEV-protected via rate limiting. The stored value is used by the CURRENT swap
+     *      (set by a previous transaction), and the newly computed value is stored for
+     *      the NEXT swap. Rate limiting caps how fast the target can change.
+     *
+     * @param poolId Pool identifier
+     * @param market Market storage reference
+     * @param cycle Cycle storage reference
+     * @param pool Pool storage reference
+     */
+    function _refreshMaturityTarget(
+        bytes32 poolId,
+        LibAppStorage.YieldForgeMarketInfo storage market,
+        LibAppStorage.CycleInfo storage cycle,
+        LibAppStorage.PoolInfo storage pool
+    ) private {
+        // Compute fresh V(t) from adapter
+        ILiquidityAdapter adapter = ILiquidityAdapter(pool.adapter);
+        (uint256 amount0, uint256 amount1) = adapter.getPositionValue(pool.poolParams);
+        uint256 currentValue = LibLiquidity.calculateValueInQuote(amount0, amount1, pool);
+
+        uint256 ptSupply = PrincipalToken(cycle.ptToken).totalSupply();
+        if (ptSupply == 0 || currentValue == 0) return;
+
+        uint256 freshBps = (currentValue * LibYieldForgeMarket.BPS_DENOMINATOR) / ptSupply;
+
+        // Get stored value (with legacy fallback)
+        uint256 storedBps = market.maturityTargetPriceBps;
+        if (storedBps == 0) storedBps = LibYieldForgeMarket.BPS_DENOMINATOR;
+
+        // Rate-limit the update
+        uint256 elapsed = block.timestamp > market.lastTargetUpdateTime
+            ? block.timestamp - market.lastTargetUpdateTime
+            : 0;
+
+        uint256 newBps = LibYieldForgeMarket.applyTargetRateLimit(storedBps, freshBps, elapsed);
+
+        // Store for next swap
+        market.maturityTargetPriceBps = newBps;
+        market.lastTargetUpdateTime = block.timestamp;
+
+        emit MaturityTargetUpdated(poolId, cycle.cycleId, newBps);
+    }
 
     /**
      * @notice Scale amount UP from native decimals to 18 decimals
@@ -456,12 +507,15 @@ contract YieldForgeMarketFacet {
         // All internal AMM math uses normalized 18 decimal values
         uint256 quoteIn18 = _scaleUp(quoteAmountIn, pool.quoteDecimals);
 
-        // Calculate output: quote → PT (all 18 decimals)
-        // Uses time-aware pricing so PT price converges to parity at maturity
+        // Calculate output using STORED maturity target (MEV layer 1: previous value)
         uint256 feeAmount18;
         (ptOut, feeAmount18) = LibYieldForgeMarket.getAmountOutQuoteToPt(
-            quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps, market.createdAt, cycle.maturityDate
+            quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps, market.createdAt, cycle.maturityDate,
+            market.maturityTargetPriceBps
         );
+
+        // Refresh maturity target for next swap (MEV layer 2: rate-limited)
+        _refreshMaturityTarget(poolId, market, cycle, pool);
 
         // Slippage check
         if (ptOut < minPtOut) {
@@ -558,13 +612,16 @@ contract YieldForgeMarketFacet {
         // Calculate dynamic fee
         uint256 feeBps = LibYieldForgeMarket.getSwapFeeBps(cycle.maturityDate);
 
-        // Calculate output: PT → quote (all 18 decimals internally)
-        // Uses time-aware pricing: sellers get more quote per PT as maturity approaches
+        // Calculate output using STORED maturity target (MEV layer 1: previous value)
         uint256 feeAmount18;
         uint256 quoteOut18;
         (quoteOut18, feeAmount18) = LibYieldForgeMarket.getAmountOutPtToQuote(
-            ptAmountIn, market.ptReserve, market.virtualQuoteReserve, feeBps, market.createdAt, cycle.maturityDate
+            ptAmountIn, market.ptReserve, market.virtualQuoteReserve, feeBps, market.createdAt, cycle.maturityDate,
+            market.maturityTargetPriceBps
         );
+
+        // Refresh maturity target for next swap (MEV layer 2: rate-limited)
+        _refreshMaturityTarget(poolId, market, cycle, pool);
 
         // Scale down quote output for slippage check and transfer
         quoteOut = _scaleDown(quoteOut18, pool.quoteDecimals);
@@ -683,7 +740,8 @@ contract YieldForgeMarketFacet {
 
         // Use time-aware pricing for accurate preview
         (ptOut,) = LibYieldForgeMarket.getAmountOutQuoteToPt(
-            quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps, market.createdAt, cycle.maturityDate
+            quoteIn18, market.virtualQuoteReserve, market.ptReserve, feeBps, market.createdAt, cycle.maturityDate,
+            market.maturityTargetPriceBps
         );
     }
 
@@ -710,7 +768,8 @@ contract YieldForgeMarketFacet {
         // Use time-aware pricing for accurate preview
         uint256 quoteOut18;
         (quoteOut18,) = LibYieldForgeMarket.getAmountOutPtToQuote(
-            ptIn, market.ptReserve, market.virtualQuoteReserve, feeBps, market.createdAt, cycle.maturityDate
+            ptIn, market.ptReserve, market.virtualQuoteReserve, feeBps, market.createdAt, cycle.maturityDate,
+            market.maturityTargetPriceBps
         );
 
         // Scale down to native decimals for user
@@ -719,10 +778,9 @@ contract YieldForgeMarketFacet {
 
     /**
      * @notice Get current PT price in basis points with time-decay applied
-     * @dev Returns effective price that accounts for automatic convergence to parity.
-     *      As maturity approaches, the price drifts toward 10000 bps (100% = $1).
+     * @dev Returns effective price that accounts for convergence to maturity target V(t).
      * @param poolId Pool identifier
-     * @return priceBps PT price (e.g., 9500 = 0.95 = 5% discount)
+     * @return priceBps PT price in basis points
      */
     function getPtPrice(bytes32 poolId) external view returns (uint256 priceBps) {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
@@ -730,9 +788,9 @@ contract YieldForgeMarketFacet {
         LibAppStorage.CycleInfo storage cycle = s.cycles[poolId][cycleId];
         LibAppStorage.YieldForgeMarketInfo storage market = s.yieldForgeMarkets[poolId][cycleId];
 
-        // Use time-aware effective price
         return LibYieldForgeMarket.getEffectivePtPriceBps(
-            market.ptReserve, market.virtualQuoteReserve, market.createdAt, cycle.maturityDate
+            market.ptReserve, market.virtualQuoteReserve, market.createdAt, cycle.maturityDate,
+            market.maturityTargetPriceBps
         );
     }
 

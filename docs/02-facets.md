@@ -377,13 +377,108 @@ ytFairValue = APY × timeRemaining / 365 days
 
 **File:** `src/facets/YieldForgeMarketFacet.sol`
 
-Built-in AMM for PT trading before maturity with **time-aware pricing** that automatically converges to parity at maturity.
+Built-in AMM for PT trading before maturity with **time-aware pricing** that automatically converges to the dynamic maturity target V(t) = `currentLpValue / totalPTSupply`.
 
 See [06-yield-market.md](./06-yield-market.md) for detailed documentation.
 
 ---
 
-### YTOrderbookFacet (NEW)
+### LPUnlockFacet
+
+**File:** `src/facets/LPUnlockFacet.sol`
+
+Converts existing Uniswap V3/V4 LP positions into PT/YT tokens in a single transaction. Users with full-range positions can "unlock" their capital without manually withdrawing and re-depositing.
+
+#### Use Cases
+
+| Audience | Benefit |
+|----------|---------|
+| **Young projects** | Unlock treasury LP capital — sell PT for working capital while pool stays intact |
+| **Market makers** | Get tradeable PT/YT instruments without closing positions |
+| **Regular LPs** | Monetize locked positions via secondary markets |
+
+#### Unlock Position
+
+```solidity
+function unlockPosition(
+    address adapter,
+    bytes calldata poolParams,
+    address quoteToken,       // used for auto-registration if pool not exists
+    uint256 userTokenId,
+    uint16 percentBps         // 1 = 0.01%, 10000 = 100%
+) external returns (uint256 ptAmount, uint256 ytAmount);
+```
+
+**Requirements:**
+- User must approve their LP NFT to the Diamond before calling
+- Only full-range positions are supported
+- `percentBps` must be in range [1, 10000]
+
+**Flow:**
+
+1. Validate input, check pause/reentrancy
+2. Compute `poolId = keccak256(abi.encode(adapter, poolParams))`
+3. Auto-register pool via self-call to `registerPool()` if not exists
+4. Check pool is not banned
+5. Ensure active cycle (create new one if needed)
+6. Transfer NFT from user to adapter
+7. Call `adapter.unlockPosition()` — adapter withdraws from user's position, deposits into protocol position, returns NFT to user
+8. Update `cycle.totalLiquidity`
+9. Calculate value in quote token via `LibLiquidity.calculateValueInQuote()`
+10. Mint PT/YT to user
+11. Refund any dust tokens to user
+
+**Auto-Registration:**
+
+If the pool is not yet registered, the facet performs a self-call through Diamond dispatch:
+```solidity
+address(this).call(abi.encodeWithSignature(
+    "registerPool(address,bytes,address)",
+    adapter, poolParams, quoteToken
+));
+```
+This preserves all existing validation: adapter approved, pool supported, quote token whitelisted.
+
+#### Preview
+
+```solidity
+function previewUnlockPosition(
+    address adapter,
+    bytes calldata poolParams,
+    uint256 userTokenId,
+    uint16 percentBps
+) external view returns (uint256 expectedPT, uint256 expectedYT);
+```
+
+Returns expected PT/YT amounts based on current pool price. Works both for registered and unregistered pools (rough estimate for unregistered).
+
+#### Events
+
+```solidity
+event LPUnlocked(
+    bytes32 indexed poolId,
+    uint256 indexed cycleId,
+    address indexed user,
+    uint256 userTokenId,
+    uint16 percentBps,
+    uint256 liquidity,
+    uint256 ptMinted,
+    uint256 ytMinted
+);
+```
+
+#### Errors
+
+| Error | Condition |
+|-------|-----------|
+| `InvalidPercentBps(uint16)` | percentBps is 0 or > 10000 |
+| `PoolBanned(bytes32)` | Pool is banned |
+| `ZeroLiquidityReturned()` | Adapter returned zero liquidity |
+| `PoolRegistrationFailed(bytes)` | Auto-registration self-call failed |
+
+---
+
+### YTOrderbookFacet
 
 **File:** `src/facets/YTOrderbookFacet.sol`
 
@@ -524,6 +619,10 @@ event OrderCancelled(uint256 indexed orderId, address indexed maker);
 User
   │
   ├── addLiquidity() ──────────► LiquidityFacet ──────► Adapter ──────► Uniswap
+  │                                    │
+  │                                    └── mints ──────► PT + YT
+  │
+  ├── unlockPosition() ───────► LPUnlockFacet ────────► Adapter.unlockPosition()
   │                                    │
   │                                    └── mints ──────► PT + YT
   │

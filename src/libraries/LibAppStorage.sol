@@ -277,6 +277,13 @@ library LibAppStorage {
         uint256 accumulatedFeesQuote;
         /// @notice Timestamp when market was created
         uint256 createdAt;
+        /// @notice Target PT price at maturity in basis points (10000 = 1.0)
+        /// @dev Updated during swaps and liquidity events with rate limiting (MEV protection).
+        /// V(t) = currentLpValue / totalPTSupply. 0 = legacy, treated as 10000.
+        uint256 maturityTargetPriceBps;
+        /// @notice Last time maturityTargetPriceBps was updated
+        /// @dev Used for rate-limiting target changes to prevent MEV manipulation
+        uint256 lastTargetUpdateTime;
     }
 
     // ============================================================

@@ -17,13 +17,18 @@ The protocol uses the **Diamond Pattern** for upgradeability and modular design:
                     │   (Main Proxy)   │
                     └────────┬─────────┘
                              │
-    ┌────────────────────────┼────────────────────────┐
+    ┌───────────┬────────────┼────────────┬───────────┐
     │           │            │            │           │
     ▼           ▼            ▼            ▼           ▼
 ┌────────┐ ┌────────┐ ┌───────────┐ ┌─────────┐ ┌──────────┐
 │  Pool  │ │Liquidity│ │YieldForge │ │  Yield  │ │    YT    │
 │Registry│ │ Facet   │ │MarketFacet│ │Accumul. │ │Orderbook │
 └────────┘ └────────┘ └───────────┘ └─────────┘ └──────────┘
+                │
+           ┌────┴────┐
+           │LPUnlock │
+           │ Facet   │
+           └─────────┘
 ```
 
 ### Why Diamond Pattern?
@@ -69,14 +74,15 @@ struct AppStorage {
 |-----------|---------|
 | **Diamond.sol** | Main proxy contract routing calls to facets |
 | **Facets** | Modular logic components (PoolRegistry, Liquidity, etc.) |
-| **Libraries** | Shared utilities (LibAppStorage, LibYieldForgeMarket) |
+| **Libraries** | Shared utilities (LibAppStorage, LibLiquidity, LibYieldForgeMarket) |
 | **Adapters** | Protocol integrations (UniswapV4, V3) |
 | **Tokens** | PT and YT ERC20 implementations |
 | **DiamondTimelock** | Governance timelock for upgrades (48h delay) |
 
 ### Key Features
 
-- **Time-Aware PT AMM**: Price automatically converges to parity at maturity
+- **LP Unlock**: One-click conversion of existing LP positions to PT/YT tokens
+- **Time-Aware PT AMM**: Price automatically converges to dynamic maturity target V(t) at maturity
 - **YT Orderbook**: Peer-to-peer trading preserving yield rights until fill
 - **Yield Metrics**: Historical APY and YT fair value calculation
 
@@ -95,4 +101,6 @@ struct AppStorage {
 - [04-tokens.md](./04-tokens.md) - PT/YT token mechanics
 - [05-lifecycle.md](./05-lifecycle.md) - Pool and cycle lifecycle
 - [06-yield-market.md](./06-yield-market.md) - YieldForge Market AMM
+- [07-deployment.md](./07-deployment.md) - Deployment guide
+- [08-admin-operations.md](./08-admin-operations.md) - Admin operations
 

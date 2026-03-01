@@ -69,11 +69,12 @@ contract UniswapV4AdapterTest is Test {
     address diamond = address(0xD1A);
     address attacker = address(0xBAD);
     address poolManager = address(0x444);
+    address v4PositionManager = address(0x555);
 
     UniswapV4Adapter v4Adapter;
 
     function setUp() public {
-        v4Adapter = new UniswapV4Adapter(poolManager, diamond);
+        v4Adapter = new UniswapV4Adapter(poolManager, v4PositionManager, diamond);
     }
 
     function test_V4Adapter_OnlyDiamondCanAddLiquidity() public {
@@ -102,11 +103,16 @@ contract UniswapV4AdapterTest is Test {
 
     function test_V4Adapter_ConstructorRevertsOnZeroPoolManager() public {
         vm.expectRevert("Zero pool manager");
-        new UniswapV4Adapter(address(0), diamond);
+        new UniswapV4Adapter(address(0), v4PositionManager, diamond);
+    }
+
+    function test_V4Adapter_ConstructorRevertsOnZeroPositionManager() public {
+        vm.expectRevert("Zero position manager");
+        new UniswapV4Adapter(poolManager, address(0), diamond);
     }
 
     function test_V4Adapter_ConstructorRevertsOnZeroDiamond() public {
         vm.expectRevert("Zero diamond");
-        new UniswapV4Adapter(poolManager, address(0));
+        new UniswapV4Adapter(poolManager, v4PositionManager, address(0));
     }
 }

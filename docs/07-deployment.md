@@ -71,8 +71,14 @@ config/
 {
   "name": "Ethereum Mainnet",
   "adapters": {
-    "UniswapV4Adapter": { "poolManager": "0x..." },
-    "UniswapV3Adapter": { "positionManager": "0x...", "factory": "0x..." }
+    "UniswapV4Adapter": {
+      "poolManager": "0x...",
+      "positionManager": "0x..."
+    },
+    "UniswapV3Adapter": {
+      "positionManager": "0x...",
+      "factory": "0x..."
+    }
   },
   "quoteTokens": {
     "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
@@ -149,9 +155,11 @@ FACET=all pnpm facet:upgrade
 
 - `PoolRegistryFacet`
 - `LiquidityFacet`
+- `LPUnlockFacet`
 - `YieldAccumulatorFacet`
 - `RedemptionFacet`
 - `YieldForgeMarketFacet`
+- `YTOrderbookFacet`
 - `PauseFacet`
 - `DiamondLoupeFacet`
 - `OwnershipFacet`

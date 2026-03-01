@@ -86,7 +86,7 @@ Example: YF-PT-A3F2E9-JAN2025
 ### Lifecycle
 
 ```
-1. User deposits tokens via addLiquidity()
+1. User deposits tokens via addLiquidity() or unlockPosition()
        │
        ▼
 2. Diamond calculates total value in quote token
@@ -164,11 +164,11 @@ User receives: 10% of pool's token0 + 10% of pool's token1
 
 ### Trading Before Maturity
 
-PT trades at a **discount** to face value on YieldForge Market:
+PT trades at a **discount** relative to the maturity target V(t) on YieldForge Market:
 
-- Discount reflects time value of money
+- Discount = maturityTargetPriceBps - currentPriceBps
 - Buyers lock capital until maturity for guaranteed return
-- Discount decreases as maturity approaches
+- Discount decreases as maturity approaches, converging toward V(t)
 
 ---
 
@@ -275,7 +275,7 @@ function claimYield(poolId, cycleId) returns (uint256 amount0, uint256 amount1);
 
 ## Token Factory
 
-New tokens are created by `LiquidityFacet._startNewCycle()`:
+New tokens are created by `LibLiquidity.startNewCycle()` (shared library used by both `LiquidityFacet` and `LPUnlockFacet`):
 
 ```solidity
 function _startNewCycle(bytes32 poolId) internal {
@@ -310,6 +310,7 @@ function _startNewCycle(bytes32 poolId) internal {
 | **Sell immediately**  | Lock in fixed yield by selling YT, keeping PT            |
 | **Buy at discount**   | Purchase discounted PT for guaranteed profit at maturity |
 | **Provide liquidity** | Add PT to YieldForge Market for LP fees                  |
+| **LP Unlock**         | Convert existing LP position to PT/YT via LPUnlockFacet |
 
 ### YT Strategies
 

@@ -17,6 +17,7 @@ import {RedemptionFacet} from "../src/facets/RedemptionFacet.sol";
 import {YieldForgeMarketFacet} from "../src/facets/YieldForgeMarketFacet.sol";
 import {PauseFacet} from "../src/facets/PauseFacet.sol";
 import {YTOrderbookFacet} from "../src/facets/YTOrderbookFacet.sol";
+import {LPUnlockFacet} from "../src/facets/LPUnlockFacet.sol";
 
 contract DeployHelper {
     // Helper to create a FacetCut struct
@@ -192,6 +193,13 @@ contract DeployHelper {
         selectors[7] = YTOrderbookFacet.getOrderEscrow.selector;
         selectors[8] = YTOrderbookFacet.marketBuy.selector;
         selectors[9] = YTOrderbookFacet.marketSell.selector;
+        return selectors;
+    }
+
+    function getLPUnlockSelectors() internal pure returns (bytes4[] memory) {
+        bytes4[] memory selectors = new bytes4[](2);
+        selectors[0] = LPUnlockFacet.unlockPosition.selector;
+        selectors[1] = LPUnlockFacet.previewUnlockPosition.selector;
         return selectors;
     }
 }

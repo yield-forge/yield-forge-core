@@ -89,11 +89,14 @@ contract DeployAdapters is Script {
 
     function _deployV4(string memory config, string memory basePath, address diamond) internal returns (address) {
         address poolManager = vm.parseJsonAddress(config, string.concat(basePath, ".poolManager"));
+        address v4PositionManager = vm.parseJsonAddress(config, string.concat(basePath, ".positionManager"));
         require(poolManager != address(0), "poolManager not configured");
+        require(v4PositionManager != address(0), "positionManager not configured");
 
         console.log("PoolManager:", poolManager);
+        console.log("PositionManager:", v4PositionManager);
 
-        UniswapV4Adapter adapter = new UniswapV4Adapter(poolManager, diamond);
+        UniswapV4Adapter adapter = new UniswapV4Adapter(poolManager, v4PositionManager, diamond);
         console.log("UniswapV4Adapter deployed at:", address(adapter));
         return address(adapter);
     }

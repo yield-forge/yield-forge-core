@@ -16,6 +16,7 @@ import {YieldAccumulatorFacet} from "../src/facets/YieldAccumulatorFacet.sol";
 import {RedemptionFacet} from "../src/facets/RedemptionFacet.sol";
 import {YieldForgeMarketFacet} from "../src/facets/YieldForgeMarketFacet.sol";
 import {PauseFacet} from "../src/facets/PauseFacet.sol";
+import {LPUnlockFacet} from "../src/facets/LPUnlockFacet.sol";
 
 /**
  * @title Upgrade Script
@@ -91,13 +92,14 @@ contract Upgrade is Script, DeployHelper {
     }
 
     function _upgradeAllFacets(address diamond) internal {
-        string[7] memory facets = [
+        string[8] memory facets = [
             "PoolRegistryFacet",
             "LiquidityFacet",
             "YieldAccumulatorFacet",
             "RedemptionFacet",
             "YieldForgeMarketFacet",
             "PauseFacet",
+            "LPUnlockFacet",
             "DiamondLoupeFacet"
         ];
 
@@ -133,6 +135,9 @@ contract Upgrade is Script, DeployHelper {
         } else if (_strEq(facetName, "OwnershipFacet")) {
             facet = address(new OwnershipFacet());
             selectors = getOwnershipSelectors();
+        } else if (_strEq(facetName, "LPUnlockFacet")) {
+            facet = address(new LPUnlockFacet());
+            selectors = getLPUnlockSelectors();
         }
     }
 

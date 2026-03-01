@@ -59,6 +59,7 @@ This ensures uniqueness across:
 During the active period:
 
 - Users can add liquidity → receive PT + YT
+- Users can unlock existing LP positions → receive PT + YT (via LPUnlockFacet)
 - Anyone can harvest yield → distributes to YT holders
 - YT holders can claim accumulated yield
 - PT can be traded on YieldForge Market
@@ -238,10 +239,73 @@ After maturity:
 
 ---
 
+## LP Unlock Flow
+
+LP Unlock allows users with existing Uniswap V3/V4 full-range positions to convert them into PT/YT tokens in a single transaction, without manually withdrawing and re-depositing.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     LP UNLOCK                           │
+├─────────────────────────────────────────────────────────┤
+│  Prerequisite: User has a full-range LP position        │
+│                User approves NFT to Diamond             │
+│                                                         │
+│  1. User calls unlockPosition(                          │
+│       adapter, poolParams, quoteToken,                  │
+│       userTokenId, percentBps                           │
+│     )                                                   │
+│                                                         │
+│  2. Auto-register pool if not exists                    │
+│     (self-call to registerPool)                         │
+│                                                         │
+│  3. Ensure active cycle (create if needed)              │
+│                                                         │
+│  4. Transfer NFT: user → adapter                        │
+│                                                         │
+│  5. Adapter:                                            │
+│     a. Validate position is full-range                  │
+│     b. Decrease user's position by percentBps           │
+│     c. Collect principal + accumulated fees             │
+│     d. Add tokens to protocol's aggregated position     │
+│     e. Return NFT to user                               │
+│                                                         │
+│  6. Facet mints PT + YT based on value in quote token   │
+│                                                         │
+│  7. Refund any dust tokens to user                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Example:**
+```
+User has a Uniswap V3 WETH/USDC position with 10 ETH + 30,000 USDC
+  │
+  ├── Calls unlockPosition(v3Adapter, ..., tokenId, 5000)  // 50%
+  │
+  ├── Adapter withdraws 5 ETH + 15,000 USDC from user's NFT
+  │   └── Also collects accumulated swap fees
+  │
+  ├── Adapter deposits into protocol's position
+  │
+  ├── Value calculation: 5 * 3000 + 15000 = 30,000 USDC
+  │
+  └── User receives: 30,000 PT + 30,000 YT (18 decimals)
+      User still owns their NFT with the remaining 50%
+```
+
+**Partial vs Full Unlock:**
+
+| percentBps | Effect |
+|------------|--------|
+| 10000 (100%) | Entire position is converted. NFT returned with zero liquidity. |
+| 5000 (50%) | Half the position is converted. NFT retains the other half. |
+| 1 (0.01%) | Minimal conversion. Useful for testing. |
+
+---
+
 ## Complete User Flow
 
 ```
-Day 0: User deposits 1000 USDC + 1 ETH (ETH = $2000)
+Day 0: User deposits 1000 USDC + 1 ETH via addLiquidity() or unlockPosition()
         │
         ├── Total value in quote (USDC): 1000 + 2000 = 3000
         ├── Receives 3000 PT + 3000 YT (18 decimals)

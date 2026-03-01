@@ -33,3 +33,4 @@ sepolia = "${SEPOLIA_RPC_URL}"
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
 sepolia = { key = "${ETHERSCAN_API_KEY}" }
+arbitrum_one = { key = "${ARBISCAN_API_KEY}", url = "https://api.arbiscan.io/api" }

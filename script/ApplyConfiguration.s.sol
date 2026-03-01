@@ -27,7 +27,7 @@ import {UniswapV3Adapter} from "../src/adapters/UniswapV3Adapter.sol";
  * {
  *   "name": "Ethereum Mainnet",
  *   "adapters": {
- *     "UniswapV4Adapter": { "poolManager": "0x..." },
+ *     "UniswapV4Adapter": { "poolManager": "0x...", "positionManager": "0x..." },
  *     "UniswapV3Adapter": { "positionManager": "0x...", "factory": "0x..." }
  *   },
  *   "quoteTokens": {
@@ -177,7 +177,8 @@ contract ApplyConfiguration is Script {
 
         if (nameHash == keccak256("UniswapV4Adapter")) {
             address poolManager = vm.parseJsonAddress(config, string.concat(basePath, ".poolManager"));
-            address adapter = address(new UniswapV4Adapter(poolManager, diamond));
+            address v4PositionManager = vm.parseJsonAddress(config, string.concat(basePath, ".positionManager"));
+            address adapter = address(new UniswapV4Adapter(poolManager, v4PositionManager, diamond));
             console.log("  Deployed at:", adapter);
             return adapter;
         }

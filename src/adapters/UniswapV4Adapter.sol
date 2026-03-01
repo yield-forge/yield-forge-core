@@ -16,6 +16,56 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {SqrtPriceMath} from "v4-core/libraries/SqrtPriceMath.sol";
 import {Position} from "v4-core/libraries/Position.sol";
 
+// Note: Uniswap V4 PositionManager interface is defined locally because
+// v4-periphery has permit2 dependency chain issues with our remapping setup.
+
+/**
+ * @title IV4PositionManager
+ * @notice Minimal interface for Uniswap V4 PositionManager
+ * @dev Extracted to avoid import chain issues with permit2 dependencies.
+ *      See: https://github.com/Uniswap/v4-periphery/blob/main/src/PositionManager.sol
+ */
+interface IV4PositionManager {
+    /// @notice Batches actions for modifying liquidity (calls poolManager.unlock internally)
+    function modifyLiquidities(bytes calldata unlockData, uint256 deadline) external payable;
+
+    /// @notice Returns the liquidity of a position
+    function getPositionLiquidity(uint256 tokenId) external view returns (uint128 liquidity);
+
+    /// @notice Returns the pool key and position info of a position
+    /// @return poolKey The pool key
+    /// @return info Packed position info (poolId | tickUpper | tickLower | hasSubscriber)
+    function getPoolAndPositionInfo(uint256 tokenId)
+        external
+        view
+        returns (PoolKey memory poolKey, V4PositionInfo info);
+
+    /// @notice ERC721 transferFrom
+    function transferFrom(address from, address to, uint256 tokenId) external;
+}
+
+/// @dev Packed position info from V4 PositionManager
+/// Layout: 200 bits poolId | 24 bits tickUpper | 24 bits tickLower | 8 bits hasSubscriber
+type V4PositionInfo is uint256;
+
+library V4PositionInfoLib {
+    uint8 internal constant TICK_LOWER_OFFSET = 8;
+    uint8 internal constant TICK_UPPER_OFFSET = 32;
+    uint24 internal constant MASK_24_BITS = 0xFFFFFF;
+
+    function tickLower(V4PositionInfo info) internal pure returns (int24 _tickLower) {
+        assembly ("memory-safe") {
+            _tickLower := signextend(2, shr(TICK_LOWER_OFFSET, info))
+        }
+    }
+
+    function tickUpper(V4PositionInfo info) internal pure returns (int24 _tickUpper) {
+        assembly ("memory-safe") {
+            _tickUpper := signextend(2, shr(TICK_UPPER_OFFSET, info))
+        }
+    }
+}
+
 /**
  * @title UniswapV4Adapter
  * @author Yield Forge Team
@@ -88,6 +138,10 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     /// @dev Set in constructor, immutable
     IPoolManager public immutable poolManager;
 
+    /// @notice Uniswap V4 PositionManager contract (ERC721 wrapper for positions)
+    /// @dev Used by LP Unlock to interact with user positions
+    IV4PositionManager public immutable positionManager;
+
     /// @notice Diamond contract that can call this adapter
     /// @dev Only this address can invoke liquidity operations
     address public immutable diamond;
@@ -140,15 +194,18 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     // ============================================================
 
     /**
-     * @notice Initialize the adapter with PoolManager and Diamond addresses
+     * @notice Initialize the adapter with PoolManager, PositionManager and Diamond addresses
      * @param _poolManager Uniswap V4 PoolManager contract
+     * @param _positionManager Uniswap V4 PositionManager contract (ERC721 NFT for LP positions)
      * @param _diamond YieldForge Diamond contract
      */
-    constructor(address _poolManager, address _diamond) {
+    constructor(address _poolManager, address _positionManager, address _diamond) {
         require(_poolManager != address(0), "Zero pool manager");
+        require(_positionManager != address(0), "Zero position manager");
         require(_diamond != address(0), "Zero diamond");
 
         poolManager = IPoolManager(_poolManager);
+        positionManager = IV4PositionManager(_positionManager);
         diamond = _diamond;
     }
 
@@ -321,6 +378,136 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
 
         emit V4YieldCollected(poolKey.toId(), yield0, yield1);
         emit YieldCollected(diamond, yield0, yield1);
+    }
+
+    // ============================================================
+    //                       LP UNLOCK
+    // ============================================================
+
+    /**
+     * @notice Unlock a user's V4 PositionManager LP position into the protocol
+     * @dev Withdraws liquidity (+ accumulated fees) from the user's PosM NFT
+     *      and deposits it into the protocol's aggregated full-range position.
+     *
+     * PREREQUISITES: The user's PosM NFT must already be transferred to this adapter
+     * by the calling facet (LPUnlockFacet). The adapter transfers it back after.
+     *
+     * FLOW:
+     * 1. Decode params (poolKey, userTokenId, percentBps, user)
+     * 2. Read user's position from PositionManager
+     * 3. Validate pool match and full-range ticks
+     * 4. Calculate liquidity to remove based on percentBps
+     * 5. Decrease user's position via PosM.modifyLiquidities (handles its own unlock)
+     * 6. Transfer NFT back to user
+     * 7. Add collected tokens to protocol's position via poolManager.unlock()
+     * 8. Refund dust to Diamond
+     *
+     * NOTE: PosM.modifyLiquidities internally calls poolManager.unlock().
+     * The subsequent poolManager.unlock() for protocol deposit runs AFTER PosM returns,
+     * so no nested unlocks occur.
+     *
+     * @param unlockParams abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
+     * @return liquidity LP units added to the protocol's position
+     * @return amount0 Token0 amount deposited into protocol
+     * @return amount1 Token1 amount deposited into protocol
+     */
+    function unlockPosition(bytes calldata unlockParams)
+        external
+        override
+        onlyDiamond
+        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        // Decode outer params
+        (bytes memory poolParamsInner, uint256 userTokenId, uint16 percentBps, address user) =
+            abi.decode(unlockParams, (bytes, uint256, uint16, address));
+
+        PoolKey memory poolKey = abi.decode(poolParamsInner, (PoolKey));
+
+        // --- Read user's position from PosM ---
+        (PoolKey memory posPoolKey, V4PositionInfo posInfo) = positionManager.getPoolAndPositionInfo(userTokenId);
+
+        // --- Validate pool match ---
+        if (PoolId.unwrap(posPoolKey.toId()) != PoolId.unwrap(poolKey.toId())) {
+            revert PoolNotSupported();
+        }
+
+        // --- Validate full-range ---
+        int24 posTickLower = V4PositionInfoLib.tickLower(posInfo);
+        int24 posTickUpper = V4PositionInfoLib.tickUpper(posInfo);
+        int24 expectedTickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+        int24 expectedTickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
+
+        if (posTickLower != expectedTickLower || posTickUpper != expectedTickUpper) {
+            revert NotFullRange();
+        }
+
+        // --- Read position liquidity ---
+        uint128 posLiquidity = positionManager.getPositionLiquidity(userTokenId);
+
+        // --- Calculate liquidity to remove ---
+        uint128 liquidityToRemove = uint128(uint256(posLiquidity) * percentBps / 10000);
+        if (liquidityToRemove == 0) revert InsufficientLiquidity();
+
+        // --- Decrease user's position via PosM ---
+        // NFT was transferred to this adapter by LPUnlockFacet
+        // PosM internally calls poolManager.unlock() for this operation
+        {
+            // Build PosM action: DECREASE_LIQUIDITY (0x01) + TAKE_PAIR (0x11)
+            // Action constants from v4-periphery/src/libraries/Actions.sol
+            bytes memory actions = abi.encodePacked(
+                uint8(0x01), // DECREASE_LIQUIDITY
+                uint8(0x11)  // TAKE_PAIR
+            );
+
+            bytes[] memory params = new bytes[](2);
+            params[0] = abi.encode(
+                userTokenId,
+                uint256(liquidityToRemove),
+                uint128(0), // amount0Min
+                uint128(0), // amount1Min
+                bytes("")   // hookData
+            );
+            params[1] = abi.encode(
+                poolKey.currency0,
+                poolKey.currency1,
+                address(this) // tokens come to adapter
+            );
+
+            positionManager.modifyLiquidities(abi.encode(actions, params), block.timestamp);
+        }
+
+        // --- Transfer NFT back to user ---
+        // PoolManager is locked here (between PosM's unlock return and our own unlock call)
+        positionManager.transferFrom(address(this), user, userTokenId);
+
+        // --- Collected tokens are now at this adapter ---
+        address token0Addr = Currency.unwrap(poolKey.currency0);
+        address token1Addr = Currency.unwrap(poolKey.currency1);
+        uint256 collected0 = IERC20(token0Addr).balanceOf(address(this));
+        uint256 collected1 = IERC20(token1Addr).balanceOf(address(this));
+
+        // --- Add to protocol's position via poolManager.unlock() ---
+        CallbackData memory data = CallbackData({
+            callbackType: CallbackType.ADD_LIQUIDITY,
+            poolKey: poolKey,
+            tickLower: expectedTickLower,
+            tickUpper: expectedTickUpper,
+            amount0: collected0,
+            amount1: collected1,
+            liquidity: 0,
+            recipient: diamond
+        });
+
+        bytes memory result = poolManager.unlock(abi.encode(data));
+        (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
+
+        // --- Refund dust to Diamond ---
+        uint256 remaining0 = IERC20(token0Addr).balanceOf(address(this));
+        uint256 remaining1 = IERC20(token1Addr).balanceOf(address(this));
+        if (remaining0 > 0) IERC20(token0Addr).safeTransfer(diamond, remaining0);
+        if (remaining1 > 0) IERC20(token1Addr).safeTransfer(diamond, remaining1);
+
+        emit PositionUnlocked(user, userTokenId, liquidity, amount0, amount1);
     }
 
     // ============================================================
@@ -627,6 +814,11 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     /// @notice Returns PoolManager address
     function protocolAddress() external view override returns (address) {
         return address(poolManager);
+    }
+
+    /// @notice Returns the NFT contract address for LP positions (PositionManager)
+    function positionNftAddress() external view override returns (address) {
+        return address(positionManager);
     }
 
     // ============================================================

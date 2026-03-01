@@ -90,6 +90,8 @@ interface INonfungiblePositionManager {
             uint128 tokensOwed0,
             uint128 tokensOwed1
         );
+
+    function transferFrom(address from, address to, uint256 tokenId) external;
 }
 
 /**
@@ -426,6 +428,131 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     }
 
     // ============================================================
+    //                       LP UNLOCK
+    // ============================================================
+
+    /**
+     * @notice Unlock a user's V3 LP position into the protocol
+     * @dev Withdraws liquidity (+ accumulated fees) from the user's NFT position
+     *      and deposits it into the protocol's aggregated full-range position.
+     *
+     * PREREQUISITES: The user's NFT must already be transferred to this adapter
+     * by the calling facet (LPUnlockFacet). The adapter transfers it back after.
+     *
+     * FLOW:
+     * 1. Decode params (pool, userTokenId, percentBps, user)
+     * 2. Read user's position from NonfungiblePositionManager
+     * 3. Validate pool match and full-range ticks
+     * 4. Calculate liquidity to remove based on percentBps
+     * 5. Decrease liquidity on user's NFT
+     * 6. Collect all tokens (principal + accumulated fees)
+     * 7. Transfer NFT back to user
+     * 8. Add collected tokens to protocol's position
+     * 9. Refund dust to Diamond
+     *
+     * @param unlockParams abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
+     * @return liquidity LP units added to the protocol's position
+     * @return amount0 Token0 amount deposited into protocol
+     * @return amount1 Token1 amount deposited into protocol
+     */
+    function unlockPosition(bytes calldata unlockParams)
+        external
+        override
+        onlyDiamond
+        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        // Decode outer params
+        (bytes memory poolParamsInner, uint256 userTokenId, uint16 percentBps, address user) =
+            abi.decode(unlockParams, (bytes, uint256, uint16, address));
+
+        address pool = abi.decode(poolParamsInner, (address));
+
+        // --- Read user's position ---
+        (
+            ,
+            ,
+            address posToken0,
+            address posToken1,
+            uint24 posFee,
+            int24 posTickLower,
+            int24 posTickUpper,
+            uint128 posLiquidity,
+            ,
+            ,
+            ,
+        ) = positionManager.positions(userTokenId);
+
+        // --- Validate pool match ---
+        address expectedPool = factory.getPool(posToken0, posToken1, posFee);
+        if (expectedPool != pool) revert PoolNotSupported();
+
+        // --- Validate full-range ---
+        int24 tickSpacing = IUniswapV3Pool(pool).tickSpacing();
+        int24 expectedTickLower = (MIN_TICK / tickSpacing) * tickSpacing;
+        int24 expectedTickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
+
+        if (posTickLower != expectedTickLower || posTickUpper != expectedTickUpper) {
+            revert NotFullRange();
+        }
+
+        // --- Calculate liquidity to remove ---
+        uint128 liquidityToRemove = uint128(uint256(posLiquidity) * percentBps / 10000);
+        if (liquidityToRemove == 0) revert InsufficientLiquidity();
+
+        // --- Decrease user's liquidity ---
+        // NFT was transferred to this adapter by LPUnlockFacet
+        positionManager.decreaseLiquidity(
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: userTokenId,
+                liquidity: liquidityToRemove,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
+            })
+        );
+
+        // --- Collect ALL: decreased principal + accumulated fees ---
+        (uint256 collected0, uint256 collected1) = positionManager.collect(
+            INonfungiblePositionManager.CollectParams({
+                tokenId: userTokenId,
+                recipient: address(this),
+                amount0Max: MAX_UINT128,
+                amount1Max: MAX_UINT128
+            })
+        );
+
+        // --- Transfer NFT back to user ---
+        // Use transferFrom (not safeTransferFrom) to avoid onERC721Received callback
+        INonfungiblePositionManager(address(positionManager)).transferFrom(address(this), user, userTokenId);
+
+        // --- Add collected tokens to protocol's position ---
+        IERC20(posToken0).safeIncreaseAllowance(address(positionManager), collected0);
+        IERC20(posToken1).safeIncreaseAllowance(address(positionManager), collected1);
+
+        uint256 existingTokenId = poolToTokenId[pool];
+
+        if (existingTokenId == 0) {
+            // First time: mint new NFT for protocol
+            uint256 newTokenId;
+            (newTokenId, liquidity, amount0, amount1) =
+                _mintPosition(posToken0, posToken1, posFee, expectedTickLower, expectedTickUpper, collected0, collected1);
+            poolToTokenId[pool] = newTokenId;
+            emit V3PositionCreated(pool, newTokenId, liquidity);
+        } else {
+            // Increase existing protocol position
+            (liquidity, amount0, amount1) = _increaseLiquidity(existingTokenId, collected0, collected1);
+        }
+
+        // --- Refund dust to Diamond ---
+        uint256 remaining0 = IERC20(posToken0).balanceOf(address(this));
+        uint256 remaining1 = IERC20(posToken1).balanceOf(address(this));
+        if (remaining0 > 0) IERC20(posToken0).safeTransfer(diamond, remaining0);
+        if (remaining1 > 0) IERC20(posToken1).safeTransfer(diamond, remaining1);
+
+        emit PositionUnlocked(user, userTokenId, liquidity, amount0, amount1);
+    }
+
+    // ============================================================
     //                    INTERNAL FUNCTIONS
     // ============================================================
 
@@ -576,6 +703,11 @@ contract UniswapV3Adapter is ILiquidityAdapter {
 
     /// @notice Returns NonfungiblePositionManager address
     function protocolAddress() external view override returns (address) {
+        return address(positionManager);
+    }
+
+    /// @notice Returns the NFT contract address for LP positions (NonfungiblePositionManager)
+    function positionNftAddress() external view override returns (address) {
         return address(positionManager);
     }
 

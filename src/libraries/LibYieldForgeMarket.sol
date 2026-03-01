@@ -66,6 +66,13 @@ library LibYieldForgeMarket {
     /// @dev Used in getTimeDecayFactor() for high-precision quadratic math
     uint256 internal constant TIME_PRECISION = 1e18;
 
+    /// @notice Maximum maturity target change per period (2% = 200 bps)
+    /// @dev Rate-limits maturityTargetPriceBps updates to prevent MEV manipulation
+    uint256 internal constant MAX_TARGET_CHANGE_BPS = 200;
+
+    /// @notice Period over which MAX_TARGET_CHANGE_BPS applies
+    uint256 internal constant TARGET_UPDATE_PERIOD = 6 hours;
+
     // ============================================================
     //                        ERRORS
     // ============================================================
@@ -205,7 +212,7 @@ library LibYieldForgeMarket {
 
     /**
      * @notice Calculate effective virtual quote reserve with time decay applied
-     * @dev Adjusts the virtual quote reserve to make PT price converge to parity.
+     * @dev Adjusts the virtual quote reserve to make PT price converge to the maturity target.
      *
      * HOW IT WORKS:
      * -------------
@@ -214,31 +221,26 @@ library LibYieldForgeMarket {
      * At creation (discount 10%):
      *   virtualQuote = 900, ptReserve = 1000 → price = 0.90
      *
-     * At maturity (should be parity):
-     *   We need price = 1.0 → virtualQuote should equal ptReserve
+     * At maturity (converge to V(t)):
+     *   targetQuote = ptReserve × maturityTargetPriceBps / BPS_DENOMINATOR
+     *   price = targetQuote / ptReserve = V(t)
      *
-     * This function interpolates virtualQuote toward ptReserve over time:
-     *   effectiveQuote = virtualQuote + (ptReserve - virtualQuote) × decayFactor
+     * This function interpolates virtualQuote toward targetQuote over time:
+     *   effectiveQuote = virtualQuote + (targetQuote - virtualQuote) × decayFactor
      *
-     * Example (10% discount, 50% time elapsed):
-     *   virtualQuote = 900, ptReserve = 1000, decayFactor = 0.25 (quadratic at 50%)
-     *   effectiveQuote = 900 + (1000 - 900) × 0.25 = 925
-     *   Effective price = 925/1000 = 0.925 (instead of 0.90)
-     *
-     * @param virtualQuoteReserve Current virtual quote reserve (18 decimals)
-     * @param ptReserve           Current PT reserve (18 decimals)
-     * @param createdAt           Market creation timestamp
-     * @param maturityDate        Cycle maturity timestamp
-     * @return effectiveQuote     Time-adjusted virtual quote reserve
-     *
-     * @custom:note Both reserves should be in the same denomination (18 decimals)
-     *              for correct calculation.
+     * @param virtualQuoteReserve    Current virtual quote reserve (18 decimals)
+     * @param ptReserve              Current PT reserve (18 decimals)
+     * @param createdAt              Market creation timestamp
+     * @param maturityDate           Cycle maturity timestamp
+     * @param maturityTargetPriceBps Target price at maturity in bps (10000 = 1.0). 0 = legacy → 10000.
+     * @return effectiveQuote        Time-adjusted virtual quote reserve
      */
     function getEffectiveVirtualQuoteReserve(
         uint256 virtualQuoteReserve,
         uint256 ptReserve,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 effectiveQuote) {
         uint256 decayFactor = getTimeDecayFactor(createdAt, maturityDate);
 
@@ -247,20 +249,22 @@ library LibYieldForgeMarket {
             return virtualQuoteReserve;
         }
 
-        // If at maturity, return parity (quote = pt)
+        // Calculate convergence target: ptReserve × V(t)
+        // Legacy (0) treated as BPS_DENOMINATOR (1.0) for backwards compatibility
+        uint256 targetBps = maturityTargetPriceBps == 0 ? BPS_DENOMINATOR : maturityTargetPriceBps;
+        uint256 targetQuote = (ptReserve * targetBps) / BPS_DENOMINATOR;
+
+        // If at maturity, return target directly
         if (decayFactor == TIME_PRECISION) {
-            return ptReserve;
+            return targetQuote;
         }
 
-        // Interpolate: effectiveQuote = quote + (pt - quote) × factor / PRECISION
-        // This handles both cases: quote < pt (discount) and quote > pt (premium)
-        if (ptReserve >= virtualQuoteReserve) {
-            // Normal case: PT at discount (quote < pt)
-            uint256 gap = ptReserve - virtualQuoteReserve;
+        // Interpolate: effectiveQuote = quote + (target - quote) × factor / PRECISION
+        if (targetQuote >= virtualQuoteReserve) {
+            uint256 gap = targetQuote - virtualQuoteReserve;
             effectiveQuote = virtualQuoteReserve + (gap * decayFactor) / TIME_PRECISION;
         } else {
-            // Rare case: PT at premium (quote > pt)
-            uint256 gap = virtualQuoteReserve - ptReserve;
+            uint256 gap = virtualQuoteReserve - targetQuote;
             effectiveQuote = virtualQuoteReserve - (gap * decayFactor) / TIME_PRECISION;
         }
     }
@@ -270,26 +274,25 @@ library LibYieldForgeMarket {
      * @dev Used for PT→Quote swaps where we need to adjust PT side.
      *
      * This is the inverse adjustment of getEffectiveVirtualQuoteReserve().
-     * For PT→Quote swaps, we adjust the PT reserve down toward quote reserve.
+     * For PT→Quote swaps, we adjust the PT reserve toward the target where
+     * price = virtualQuoteReserve / effectivePt = V(t).
      *
-     * WHY ADJUST PT RESERVE?
-     * ----------------------
-     * For Quote→PT: we increase effective quote → user gets more PT per quote
-     * For PT→Quote: we decrease effective PT → user gets more quote per PT
+     * At maturity: effectivePt = virtualQuoteReserve × BPS_DENOMINATOR / targetBps
+     * → price = virtualQuoteReserve / effectivePt = targetBps / BPS_DENOMINATOR = V(t)
      *
-     * Both adjustments push PT price toward parity as maturity approaches.
-     *
-     * @param ptReserve           Current PT reserve (18 decimals)
-     * @param virtualQuoteReserve Current virtual quote reserve (18 decimals)
-     * @param createdAt           Market creation timestamp
-     * @param maturityDate        Cycle maturity timestamp
-     * @return effectivePt        Time-adjusted PT reserve
+     * @param ptReserve              Current PT reserve (18 decimals)
+     * @param virtualQuoteReserve    Current virtual quote reserve (18 decimals)
+     * @param createdAt              Market creation timestamp
+     * @param maturityDate           Cycle maturity timestamp
+     * @param maturityTargetPriceBps Target price at maturity in bps (10000 = 1.0). 0 = legacy → 10000.
+     * @return effectivePt           Time-adjusted PT reserve
      */
     function getEffectivePtReserve(
         uint256 ptReserve,
         uint256 virtualQuoteReserve,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 effectivePt) {
         uint256 decayFactor = getTimeDecayFactor(createdAt, maturityDate);
 
@@ -297,16 +300,20 @@ library LibYieldForgeMarket {
             return ptReserve;
         }
 
+        // Calculate convergence target: virtualQuote / V(t)
+        uint256 targetBps = maturityTargetPriceBps == 0 ? BPS_DENOMINATOR : maturityTargetPriceBps;
+        uint256 targetPt = (virtualQuoteReserve * BPS_DENOMINATOR) / targetBps;
+
         if (decayFactor == TIME_PRECISION) {
-            return virtualQuoteReserve;
+            return targetPt;
         }
 
-        // Interpolate: effectivePt = pt + (quote - pt) × factor / PRECISION
-        if (virtualQuoteReserve >= ptReserve) {
-            uint256 gap = virtualQuoteReserve - ptReserve;
+        // Interpolate: effectivePt = pt + (target - pt) × factor / PRECISION
+        if (targetPt >= ptReserve) {
+            uint256 gap = targetPt - ptReserve;
             effectivePt = ptReserve + (gap * decayFactor) / TIME_PRECISION;
         } else {
-            uint256 gap = ptReserve - virtualQuoteReserve;
+            uint256 gap = ptReserve - targetPt;
             effectivePt = ptReserve - (gap * decayFactor) / TIME_PRECISION;
         }
     }
@@ -445,11 +452,12 @@ library LibYieldForgeMarket {
         uint256 ptReserve,
         uint256 feeBps,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 amountOut, uint256 feeAmount) {
         // Calculate time-adjusted quote reserve
         uint256 effectiveQuote =
-            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate);
+            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate, maturityTargetPriceBps);
 
         // Use standard AMM formula with effective reserve
         return getAmountOut(amountIn, effectiveQuote, ptReserve, feeBps);
@@ -490,10 +498,11 @@ library LibYieldForgeMarket {
         uint256 virtualQuoteReserve,
         uint256 feeBps,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 amountOut, uint256 feeAmount) {
         // Calculate time-adjusted PT reserve
-        uint256 effectivePt = getEffectivePtReserve(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
+        uint256 effectivePt = getEffectivePtReserve(ptReserve, virtualQuoteReserve, createdAt, maturityDate, maturityTargetPriceBps);
 
         // Use standard AMM formula with effective reserve
         return getAmountOut(amountIn, effectivePt, virtualQuoteReserve, feeBps);
@@ -517,10 +526,11 @@ library LibYieldForgeMarket {
         uint256 ptReserve,
         uint256 feeBps,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 amountIn) {
         uint256 effectiveQuote =
-            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate);
+            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate, maturityTargetPriceBps);
 
         return getAmountIn(amountOut, effectiveQuote, ptReserve, feeBps);
     }
@@ -543,9 +553,10 @@ library LibYieldForgeMarket {
         uint256 virtualQuoteReserve,
         uint256 feeBps,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 amountIn) {
-        uint256 effectivePt = getEffectivePtReserve(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
+        uint256 effectivePt = getEffectivePtReserve(ptReserve, virtualQuoteReserve, createdAt, maturityDate, maturityTargetPriceBps);
 
         return getAmountIn(amountOut, effectivePt, virtualQuoteReserve, feeBps);
     }
@@ -684,34 +695,28 @@ library LibYieldForgeMarket {
      * @notice Get PT price in bps with time decay applied
      * @dev This is the main view function for displaying current PT price in UI.
      *
-     * The effective price accounts for time-based convergence to parity.
-     * As maturity approaches, the effective price moves toward 10000 bps (100% = $1).
+     * The effective price accounts for time-based convergence to the maturity target V(t).
+     * As maturity approaches, the effective price moves toward maturityTargetPriceBps.
      *
-     * FORMULA:
-     * effectivePrice = effectiveQuoteReserve / ptReserve * 10000
-     *
-     * Example (10% initial discount, 50% time elapsed):
-     *   virtualQuote = 900, ptReserve = 1000
-     *   effectiveQuote = 925 (after quadratic decay at 50%)
-     *   effectivePrice = 925 / 1000 * 10000 = 9250 bps (92.5%)
-     *
-     * @param ptReserve             Current PT reserve (18 decimals)
-     * @param virtualQuoteReserve   Current virtual quote reserve (18 decimals)
-     * @param createdAt             Market creation timestamp
-     * @param maturityDate          Cycle maturity timestamp
-     * @return priceBps             PT price in basis points (10000 = $1 parity)
+     * @param ptReserve              Current PT reserve (18 decimals)
+     * @param virtualQuoteReserve    Current virtual quote reserve (18 decimals)
+     * @param createdAt              Market creation timestamp
+     * @param maturityDate           Cycle maturity timestamp
+     * @param maturityTargetPriceBps Target price at maturity in bps. 0 = legacy → 10000.
+     * @return priceBps              PT price in basis points
      */
     function getEffectivePtPriceBps(
         uint256 ptReserve,
         uint256 virtualQuoteReserve,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 priceBps) {
         if (ptReserve == 0) return 0;
 
         // Get time-adjusted quote reserve
         uint256 effectiveQuote =
-            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate);
+            getEffectiveVirtualQuoteReserve(virtualQuoteReserve, ptReserve, createdAt, maturityDate, maturityTargetPriceBps);
 
         // Calculate price: effectiveQuote / ptReserve * BPS_DENOMINATOR
         priceBps = (effectiveQuote * BPS_DENOMINATOR) / ptReserve;
@@ -719,25 +724,63 @@ library LibYieldForgeMarket {
 
     /**
      * @notice Get effective discount after time decay
-     * @dev Returns 0 at maturity (no discount, PT = parity)
+     * @dev Returns 0 at maturity (price = maturity target). Discount is relative to maturity target V(t).
      *
-     * @param ptReserve             Current PT reserve
-     * @param virtualQuoteReserve   Current virtual quote reserve
-     * @param createdAt             Market creation timestamp
-     * @param maturityDate          Cycle maturity timestamp
-     * @return discountBps          Effective discount in basis points
+     * @param ptReserve              Current PT reserve
+     * @param virtualQuoteReserve    Current virtual quote reserve
+     * @param createdAt              Market creation timestamp
+     * @param maturityDate           Cycle maturity timestamp
+     * @param maturityTargetPriceBps Target price at maturity in bps. 0 = legacy → 10000.
+     * @return discountBps           Effective discount in basis points
      */
     function getEffectiveDiscountBps(
         uint256 ptReserve,
         uint256 virtualQuoteReserve,
         uint256 createdAt,
-        uint256 maturityDate
+        uint256 maturityDate,
+        uint256 maturityTargetPriceBps
     ) internal view returns (uint256 discountBps) {
-        uint256 priceBps = getEffectivePtPriceBps(ptReserve, virtualQuoteReserve, createdAt, maturityDate);
+        uint256 priceBps = getEffectivePtPriceBps(ptReserve, virtualQuoteReserve, createdAt, maturityDate, maturityTargetPriceBps);
 
-        if (priceBps >= BPS_DENOMINATOR) return 0;
+        // Discount is relative to the maturity target, not 1.0
+        uint256 targetBps = maturityTargetPriceBps == 0 ? BPS_DENOMINATOR : maturityTargetPriceBps;
+        if (priceBps >= targetBps) return 0;
 
-        discountBps = BPS_DENOMINATOR - priceBps;
+        discountBps = targetBps - priceBps;
+    }
+
+    // ============================================================
+    //                 MATURITY TARGET HELPERS
+    // ============================================================
+
+    /**
+     * @notice Apply rate limiting to maturity target update
+     * @dev Prevents MEV manipulation by clamping how fast the target can change.
+     *      Max change: MAX_TARGET_CHANGE_BPS per TARGET_UPDATE_PERIOD.
+     *
+     * @param storedBps    Current stored maturity target (bps)
+     * @param freshBps     Freshly computed maturity target (bps)
+     * @param elapsed      Seconds since last update
+     * @return newBps      Rate-limited new target (bps)
+     */
+    function applyTargetRateLimit(uint256 storedBps, uint256 freshBps, uint256 elapsed)
+        internal
+        pure
+        returns (uint256 newBps)
+    {
+        // Calculate max allowed change based on elapsed time
+        uint256 maxDelta = (MAX_TARGET_CHANGE_BPS * elapsed) / TARGET_UPDATE_PERIOD;
+
+        if (freshBps >= storedBps) {
+            uint256 delta = freshBps - storedBps;
+            newBps = delta > maxDelta ? storedBps + maxDelta : freshBps;
+        } else {
+            uint256 delta = storedBps - freshBps;
+            newBps = delta > maxDelta ? storedBps - maxDelta : freshBps;
+        }
+
+        // Ensure target never goes to 0
+        if (newBps == 0) newBps = 1;
     }
 
     // ============================================================

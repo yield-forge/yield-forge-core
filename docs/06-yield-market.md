@@ -71,14 +71,16 @@ External quote token amounts are scaled at swap boundaries using `quoteDecimals`
 
 ### Discount
 
-Discount represents how much PT trades below face value:
+Discount represents how much PT trades below its maturity target value:
 
 ```
-Face Value (at maturity) = 1.0
-Discount 5% → PT Price = 0.95
+Maturity Target V(t) = currentLpValue / totalPTSupply
+Discount = maturityTargetPriceBps - priceBps
 
-Discount = 10000 - priceBps
+Example: V(t) = 0.97 (9700 bps), PT Price = 0.92 → Discount = 500 bps (5%)
 ```
+
+> **Note:** The maturity target is not always 1.0. If the underlying LP position lost value to impermanent loss, V(t) < 1.0. If it gained, V(t) > 1.0. The AMM converges PT price toward V(t), not a fixed 1.0.
 
 ---
 
@@ -258,12 +260,30 @@ function getAmountOut(
 
 ### Time-Aware Price Convergence
 
-The AMM automatically adjusts prices to converge toward parity (1:1) as maturity approaches. This mimics real-world bond pricing behavior.
+The AMM automatically adjusts prices to converge toward the **maturity target V(t)** as maturity approaches. V(t) = `currentLpValue / totalPTSupply`, stored on-chain as `maturityTargetPriceBps`.
 
 **Why Time-Aware Pricing?**
-- Early in cycle: PT trades at discount (e.g., 95%)
-- Near maturity: PT should trade at ~100% (parity)
-- At maturity: PT = underlying value
+- Early in cycle: PT trades at discount relative to V(t)
+- Near maturity: PT should trade close to V(t)
+- At maturity: PT price = V(t) (LP position value per unit)
+
+**Dynamic Maturity Target:**
+
+The maturity target is refreshed on every swap and liquidity event via `_refreshMaturityTarget()`:
+
+```solidity
+// Stored in YieldForgeMarketInfo:
+uint256 maturityTargetPriceBps;  // Target PT price at maturity (10000 = 1.0). 0 = legacy → 10000.
+uint256 lastTargetUpdateTime;    // Last update timestamp for rate limiting
+
+// Rate limiting constants:
+MAX_TARGET_CHANGE_BPS = 200;     // Max 2% change per period
+TARGET_UPDATE_PERIOD = 6 hours;
+```
+
+**MEV Protection (two layers):**
+1. **Stale value for current swap**: The swap uses the value stored by a *previous* transaction
+2. **Rate limiting**: Stored value can only move ±200 bps per 6-hour period (~0.001%/block)
 
 **Quadratic Time Decay:**
 
@@ -277,32 +297,36 @@ function getTimeDecayFactor(
 ) internal view returns (uint256 factor) {
     uint256 elapsed = block.timestamp - createdAt;
     uint256 duration = maturityDate - createdAt;
-    
+
     // ratio = elapsed / duration (scaled by 1e18)
     uint256 ratio = (elapsed * 1e18) / duration;
-    
+
     // factor = ratio² / 1e18
     factor = (ratio * ratio) / 1e18;
 }
 ```
 
-**Example (90-day cycle, 10% initial discount):**
+**Example (90-day cycle, 10% initial discount, V(t) = 9700 bps = 0.97):**
 
 | Day | Elapsed % | Decay Factor | Effective Price |
 |-----|-----------|--------------|-----------------|
-| 0   | 0%        | 0%           | 90% (original)  |
-| 45  | 50%       | 25%          | 92.5%           |
-| 67  | 75%       | 56%          | 95.6%           |
-| 90  | 100%      | 100%         | 100% (parity)   |
+| 0   | 0%        | 0%           | 87% (original)  |
+| 45  | 50%       | 25%          | 89.5%           |
+| 67  | 75%       | 56%          | 92.6%           |
+| 90  | 100%      | 100%         | 97% = V(t)      |
 
 **Effective Reserve Calculation:**
 
 ```solidity
-// For Quote→PT swaps: increase effective quote reserve
-effectiveQuote = virtualQuote + (ptReserve - virtualQuote) × decayFactor
+// targetBps = maturityTargetPriceBps == 0 ? 10000 : maturityTargetPriceBps
 
-// For PT→Quote swaps: decrease effective PT reserve
-effectivePt = ptReserve - (ptReserve - virtualQuote) × decayFactor
+// For Quote→PT swaps: converge quote reserve toward target
+targetQuote = ptReserve × targetBps / BPS_DENOMINATOR
+effectiveQuote = virtualQuote + (targetQuote - virtualQuote) × decayFactor
+
+// For PT→Quote swaps: converge PT reserve toward target
+targetPt = virtualQuoteReserve × BPS_DENOMINATOR / targetBps
+effectivePt = ptReserve + (targetPt - ptReserve) × decayFactor
 ```
 
 ### Initial LP Token Calculation
@@ -334,9 +358,9 @@ lpTokens = ptAmount * totalLpShares / ptReserve
 | `calculateSubsequentLpTokens()` | Additional LP token calculation |
 | `calculateWithdrawAmount()` | PT returned for LP token burn |
 | `getPtPriceBps()` | Current PT price in basis points |
-| `getDiscountBps()` | Current discount from face value |
+| `getDiscountBps()` | Current discount from maturity target |
 
-### Time-Aware Functions (NEW)
+### Time-Aware Functions
 
 | Function | Purpose |
 |----------|---------|
@@ -517,7 +541,62 @@ uint256 lpTokens = yieldForgeMarket.addYieldForgeLiquidity(
 
 ### Arbitrage at Maturity
 
-When PT matures, it's redeemable 1:1 for underlying. If discount exists:
+When PT matures, it's redeemable for its proportional share of underlying LP value. If discount exists:
 1. Buy discounted PT on market
-2. Redeem PT for full value
+2. Redeem PT for underlying value
 3. Profit = discount - fees
+
+---
+
+## PT Fair Price Model
+
+PT Fair Price represents the theoretical value of a Principal Token at any point before maturity, accounting for both time-to-maturity and impermanent loss/gain of the underlying LP position.
+
+### Why Not Simple Linear Interpolation?
+
+A naive model assumes PT price converges linearly from `(1 - discount)` to a fixed value at maturity. This ignores that the underlying LP position value can change due to asset price movements (impermanent loss/gain). PT represents a proportional claim on LP position value at redemption, so Fair Price must reflect the actual maturity target V(t).
+
+### Formula
+
+```
+fairPrice(t) = V(t) × (1 - discount × remainingRatio)
+```
+
+| Variable | Definition |
+|----------|------------|
+| `V(t)` | Normalized LP position value: `lpValuePerUnit(t) / lpValuePerUnit(0)` |
+| `lpValuePerUnit(t)` | `yfTvlInQuote × 1e18 / totalLiquidity` at time `t` |
+| `lpValuePerUnit(0)` | Same metric captured at market activation (first TvlUpdated event) |
+| `discount` | `initialDiscountBps / 10000` (set by first LP) |
+| `remainingRatio` | `max(0, (maturity - t) / (maturity - activatedAt))` |
+
+### V(t) — LP Value Ratio
+
+`V(t)` tracks how the per-unit value of the LP position changes over time relative to its initial value:
+
+| V(t) Value | Meaning |
+|------------|---------|
+| `1.0` (10000 bps) | No change — position value unchanged |
+| `0.95` (9500 bps) | 5% impermanent loss |
+| `1.03` (10300 bps) | 3% gain (favorable price movement) |
+
+**Fee accrual is excluded** from `V(t)` — pool fees are distributed to YT holders, not PT holders. `V(t)` reflects only the LP position's principal value change (impermanent loss/gain).
+
+### Data Pipeline
+
+1. **Initial capture**: `initialLpValuePerUnit` stored on `PoolCycle` when the first `TvlUpdated` event fires with `totalLiquidity > 0`
+2. **Hourly snapshots**: `PtFairPriceSnapshot` entity created by `tvlRefresh` service with pre-computed `lpValueRatioBps`
+3. **UI rendering**: MarketChart fetches snapshots, computes `fairPrice(t)` per point, renders as dotted amber line
+4. **Fallback**: When no snapshots exist (new cycle), linear interpolation is used (`V(t) = 1.0`)
+
+### Example
+
+```
+Cycle: 90-day, 5% initial discount
+Day 0:   V(0) = 1.0,  remaining = 1.0  → fairPrice = 1.0 × (1 - 0.05 × 1.0) = 0.950
+Day 45:  V(45) = 0.97, remaining = 0.5 → fairPrice = 0.97 × (1 - 0.05 × 0.5) = 0.946
+Day 45:  V(45) = 1.03, remaining = 0.5 → fairPrice = 1.03 × (1 - 0.05 × 0.5) = 1.004
+Day 90:  V(90) = 0.95, remaining = 0.0 → fairPrice = 0.95 × (1 - 0.05 × 0.0) = 0.950
+```
+
+Note: at maturity, `fairPrice = V(t)` — the discount term vanishes and PT value equals the LP position value per unit. A user who bought PT at 0.95 when V was 1.0, and V dropped to 0.95 at maturity, breaks even (no profit, no loss beyond IL).

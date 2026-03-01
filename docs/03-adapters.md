@@ -8,57 +8,63 @@ Adapters provide a unified interface for interacting with different liquidity pr
 
 ```solidity
 interface ILiquidityAdapter {
+    // LP Unlock: convert existing position into protocol
+    function unlockPosition(bytes calldata unlockParams)
+        external
+        returns (uint128 liquidity, uint256 amount0, uint256 amount1);
+
     // Add liquidity to underlying protocol
     function addLiquidity(bytes calldata params)
         external
         returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used);
-    
+
     // Remove liquidity from underlying protocol
     function removeLiquidity(uint128 liquidity, bytes calldata params)
         external
         returns (uint256 amount0, uint256 amount1);
-    
+
     // Collect accumulated yield (swap fees)
     function collectYield(bytes calldata params)
         external
         returns (uint256 yield0, uint256 yield1);
-    
+
     // View functions
     function getPoolTokens(bytes calldata params)
         external view returns (address token0, address token1);
-    
+
     function supportsPool(bytes calldata params)
         external view returns (bool);
-    
+
     function getPendingYield(bytes calldata params)
         external view returns (uint256 pending0, uint256 pending1);
-    
+
     function previewRemoveLiquidity(uint128 liquidity, bytes calldata params)
         external view returns (uint256 amount0, uint256 amount1);
-    
+
     function protocolId() external view returns (string memory);
     function protocolAddress() external view returns (address);
-    
+    function positionNftAddress() external view returns (address);
+
     // Preview and pool metrics (used by UI for accurate PT/YT preview)
     function previewAddLiquidity(bytes calldata params)
         external view returns (uint128 liquidity, uint256 amount0Used, uint256 amount1Used);
-    
+
     function calculateOptimalAmount1(uint256 amount0, bytes calldata params)
         external view returns (uint256 amount1);
-    
+
     function calculateOptimalAmount0(uint256 amount1, bytes calldata params)
         external view returns (uint256 amount0);
-    
+
     function getPoolPrice(bytes calldata params)
         external view returns (uint160 sqrtPriceX96, int24 tick);
-    
+
     function getPoolFee(bytes calldata params)
         external view returns (uint24 fee);
-    
+
     // TVL functions (for indexer/UI)
     function getPositionValue(bytes calldata params)
         external view returns (uint256 amount0, uint256 amount1);
-    
+
     function getPoolTotalValue(bytes calldata params)
         external view returns (uint256 amount0, uint256 amount1);
 }
@@ -82,6 +88,7 @@ Integrates with Uniswap V4's singleton PoolManager using the `unlock()` callback
 | Position Type | Full range (MIN_TICK to MAX_TICK) |
 | Liquidity | Fungible across all depositors |
 | Yield Source | Swap fees in both tokens |
+| Constructor | `(address poolManager, address positionManager, address diamond)` |
 
 ### Parameter Encoding
 
@@ -146,6 +153,39 @@ poolManager.modifyLiquidity(poolId, ModifyLiquidityParams({
 }));
 ```
 
+### LP Unlock (V4)
+
+Unlocks an existing V4 LP position into the protocol's aggregated position.
+
+```solidity
+function unlockPosition(bytes calldata unlockParams)
+    external override onlyDiamond
+    returns (uint128 liquidity, uint256 amount0, uint256 amount1);
+```
+
+**Parameters encoding:**
+```solidity
+// Outer layer (encoded by LPUnlockFacet):
+abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
+
+// poolParams inner layer:
+abi.encode(PoolKey)
+```
+
+**Flow:**
+1. Decode parameters, read position info via `positionManager.getPoolAndPositionInfo()`
+2. Validate pool match (compare PoolId)
+3. Validate full-range ticks (reverts `NotFullRange()` otherwise)
+4. Calculate `liquidityToRemove = posLiquidity * percentBps / 10000`
+5. Decrease user's position via `positionManager.modifyLiquidities()` with `DECREASE_LIQUIDITY` + `TAKE_PAIR`
+6. Transfer NFT back to user
+7. Add collected tokens to protocol position via `poolManager.unlock()` callback
+8. Refund dust tokens to Diamond
+
+**Key:** The PositionManager's `modifyLiquidities()` and the subsequent `poolManager.unlock()` for the protocol deposit run sequentially (no nested unlocks).
+
+---
+
 ### Preview View Functions
 
 All adapters implement preview functions for UI integration:
@@ -209,6 +249,38 @@ int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
 int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
 ```
 
+### LP Unlock (V3)
+
+Unlocks an existing V3 NFT LP position into the protocol's aggregated position.
+
+```solidity
+function unlockPosition(bytes calldata unlockParams)
+    external override onlyDiamond
+    returns (uint128 liquidity, uint256 amount0, uint256 amount1);
+```
+
+**Parameters encoding:**
+```solidity
+// Outer layer (encoded by LPUnlockFacet):
+abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
+
+// poolParams inner layer:
+abi.encode(address pool)
+```
+
+**Flow:**
+1. Decode parameters, read position via `positionManager.positions(userTokenId)`
+2. Validate pool match: `factory.getPool(token0, token1, fee) == pool`
+3. Validate full-range ticks (MIN_TICK/MAX_TICK aligned to tick spacing)
+4. Calculate `liquidityToRemove = posLiquidity * percentBps / 10000`
+5. Call `positionManager.decreaseLiquidity()` on user's NFT
+6. Call `positionManager.collect()` with `MAX_UINT128` — collects principal + accumulated fees
+7. Transfer NFT back to user via `transferFrom` (not `safeTransferFrom`, to avoid callback reentrancy)
+8. Approve tokens, add to protocol's aggregated position (mint or increase liquidity)
+9. Refund dust tokens to Diamond
+
+---
+
 ### Remove Liquidity Flow
 
 ```solidity
@@ -270,8 +342,9 @@ modifier onlyDiamond() {
 
 To support a new protocol:
 
-1. Implement `ILiquidityAdapter` interface
+1. Implement `ILiquidityAdapter` interface (including `unlockPosition` and `positionNftAddress`)
 2. Handle protocol-specific parameter encoding
 3. Ensure only Diamond can call liquidity functions
 4. Use `SafeERC20` for all token operations
-5. Register with `PoolRegistryFacet.approveAdapter()`
+5. Validate full-range ticks in `unlockPosition()` and revert with `NotFullRange()` if invalid
+6. Register with `PoolRegistryFacet.approveAdapter()`

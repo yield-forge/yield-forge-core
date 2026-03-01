@@ -363,6 +363,10 @@ contract MockTokenAdapter is ILiquidityAdapter {
         return address(this);
     }
 
+    function positionNftAddress() external view override returns (address) {
+        return address(0);
+    }
+
     // New interface stubs
     function previewAddLiquidity(bytes calldata, uint256, uint256) external pure override returns (uint128, uint256, uint256) {
         return (0, 0, 0);
@@ -391,4 +395,6 @@ contract MockTokenAdapter is ILiquidityAdapter {
     function getPoolTotalValue(bytes calldata) external pure override returns (uint256, uint256) {
         return (0, 0);
     }
+
+    function unlockPosition(bytes calldata) external override returns (uint128, uint256, uint256) { return (0, 0, 0); }
 }

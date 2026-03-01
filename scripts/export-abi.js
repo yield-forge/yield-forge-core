@@ -27,6 +27,7 @@ const FACETS = [
   "DiamondCutFacet",
   "DiamondLoupeFacet",
   "OwnershipFacet",
+  "LPUnlockFacet",
   "DiamondTimelock",
 ];
 
