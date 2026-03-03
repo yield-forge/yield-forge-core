@@ -8,8 +8,8 @@ Adapters provide a unified interface for interacting with different liquidity pr
 
 ```solidity
 interface ILiquidityAdapter {
-    // LP Unlock: convert existing position into protocol
-    function unlockPosition(bytes calldata unlockParams)
+    // LP Tokenize: convert existing position into protocol
+    function tokenizePosition(bytes calldata unlockParams)
         external
         returns (uint128 liquidity, uint256 amount0, uint256 amount1);
 
@@ -153,19 +153,19 @@ poolManager.modifyLiquidity(poolId, ModifyLiquidityParams({
 }));
 ```
 
-### LP Unlock (V4)
+### LP Tokenize (V4)
 
 Unlocks an existing V4 LP position into the protocol's aggregated position.
 
 ```solidity
-function unlockPosition(bytes calldata unlockParams)
+function tokenizePosition(bytes calldata unlockParams)
     external override onlyDiamond
     returns (uint128 liquidity, uint256 amount0, uint256 amount1);
 ```
 
 **Parameters encoding:**
 ```solidity
-// Outer layer (encoded by LPUnlockFacet):
+// Outer layer (encoded by LPTokenizeFacet):
 abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
 
 // poolParams inner layer:
@@ -249,19 +249,19 @@ int24 tickLower = (MIN_TICK / tickSpacing) * tickSpacing;
 int24 tickUpper = (MAX_TICK / tickSpacing) * tickSpacing;
 ```
 
-### LP Unlock (V3)
+### LP Tokenize (V3)
 
 Unlocks an existing V3 NFT LP position into the protocol's aggregated position.
 
 ```solidity
-function unlockPosition(bytes calldata unlockParams)
+function tokenizePosition(bytes calldata unlockParams)
     external override onlyDiamond
     returns (uint128 liquidity, uint256 amount0, uint256 amount1);
 ```
 
 **Parameters encoding:**
 ```solidity
-// Outer layer (encoded by LPUnlockFacet):
+// Outer layer (encoded by LPTokenizeFacet):
 abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
 
 // poolParams inner layer:
@@ -306,6 +306,41 @@ function removeLiquidity(uint128 liquidity, bytes calldata params) {
 
 ---
 
+## Adapter Deprecation
+
+Adapters are standalone contracts that cannot be upgraded in place. When adapter code changes (e.g., adding new features or fixing bugs), a new adapter must be deployed. The deprecation mechanism provides a graceful transition path.
+
+### Deprecation Flow
+
+```
+Old Adapter (deprecated)          New Adapter (approved)
+┌──────────────────────┐         ┌──────────────────────┐
+│  Pool A (cycle 5)    │         │                      │
+│  ├── active cycle    │         │                      │
+│  │   runs normally   │         │                      │
+│  └── matures...     ─┼────────►  Pool A' (cycle 1)   │
+│      no new cycle    │  re-    │  ├── fresh start     │
+│                      │  register│  └── same underlying │
+└──────────────────────┘         └──────────────────────┘
+```
+
+### What Happens During Deprecation
+
+| Action | During Active Cycle | After Maturity |
+|--------|-------------------|----------------|
+| Add liquidity | Allowed | Blocked (`AdapterDeprecated`) |
+| Harvest yield | Allowed | N/A (no active position) |
+| Claim yield | Allowed | Allowed |
+| Redeem PT | After maturity | Allowed |
+| New cycle | Blocked | Blocked |
+| Register same pool with new adapter | Blocked | Allowed |
+
+### Duplicate Prevention
+
+Pools are identified by `poolId = keccak256(adapter, poolParams)`. The protocol also tracks an `externalPoolId = keccak256(poolParams)` to prevent duplicate registrations for the same underlying pool. A new pool with the same `poolParams` can only be registered after the old pool is "finished" (adapter deprecated + last cycle matured).
+
+---
+
 ## Security Considerations
 
 ### Adapter Whitelisting
@@ -342,9 +377,9 @@ modifier onlyDiamond() {
 
 To support a new protocol:
 
-1. Implement `ILiquidityAdapter` interface (including `unlockPosition` and `positionNftAddress`)
+1. Implement `ILiquidityAdapter` interface (including `tokenizePosition` and `positionNftAddress`)
 2. Handle protocol-specific parameter encoding
 3. Ensure only Diamond can call liquidity functions
 4. Use `SafeERC20` for all token operations
-5. Validate full-range ticks in `unlockPosition()` and revert with `NotFullRange()` if invalid
+5. Validate full-range ticks in `tokenizePosition()` and revert with `NotFullRange()` if invalid
 6. Register with `PoolRegistryFacet.approveAdapter()`

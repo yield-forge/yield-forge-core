@@ -18,6 +18,7 @@ import {IDiamondLoupe} from "../src/interfaces/IDiamondLoupe.sol";
 import {IERC165} from "../src/interfaces/IERC165.sol";
 import {IERC173} from "../src/interfaces/IERC173.sol";
 import {ILiquidityAdapter} from "../src/interfaces/ILiquidityAdapter.sol";
+import {LibLiquidity} from "../src/libraries/LibLiquidity.sol";
 import {PrincipalToken} from "../src/tokens/PrincipalToken.sol";
 import {YieldToken} from "../src/tokens/YieldToken.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -108,7 +109,7 @@ contract IntegrationTest is Test {
         });
 
         // PoolRegistryFacet
-        bytes4[] memory registrySelectors = new bytes4[](8);
+        bytes4[] memory registrySelectors = new bytes4[](13);
         registrySelectors[0] = PoolRegistryFacet.initialize.selector;
         registrySelectors[1] = PoolRegistryFacet.approveAdapter.selector;
         registrySelectors[2] = PoolRegistryFacet.approveQuoteToken.selector;
@@ -117,6 +118,11 @@ contract IntegrationTest is Test {
         registrySelectors[5] = PoolRegistryFacet.getCycleInfo.selector;
         registrySelectors[6] = PoolRegistryFacet.banPool.selector;
         registrySelectors[7] = PoolRegistryFacet.getPoolInfo.selector;
+        registrySelectors[8] = PoolRegistryFacet.deprecateAdapter.selector;
+        registrySelectors[9] = PoolRegistryFacet.isAdapterDeprecated.selector;
+        registrySelectors[10] = PoolRegistryFacet.isPoolFinished.selector;
+        registrySelectors[11] = PoolRegistryFacet.getActivePoolForExternal.selector;
+        registrySelectors[12] = PoolRegistryFacet.poolExists.selector;
         cut[2] = IDiamondCut.FacetCut({
             facetAddress: address(poolRegistryFacet),
             action: IDiamondCut.FacetCutAction.Add,
@@ -399,6 +405,168 @@ contract IntegrationTest is Test {
         PrincipalToken pt1 = PrincipalToken(cycle1Info.ptToken);
         assertGt(pt1.balanceOf(user1), 0, "User should still have cycle 1 PT");
     }
+
+    // ================================================================
+    //              ADAPTER DEPRECATION LIFECYCLE TESTS
+    // ================================================================
+
+    /**
+     * @notice Deprecated adapter blocks new cycle creation after maturity
+     * @dev This is the core enforcement mechanism: ensureActiveCycle reverts
+     *      with AdapterDeprecated when trying to start a new cycle.
+     */
+    function test_DeprecatedAdapter_BlocksNewCycleAfterMaturity() public {
+        // Start cycle 1
+        vm.startPrank(user1);
+        token0.approve(address(diamond), 2000e18);
+        token1.approve(address(diamond), 2000e18);
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+
+        // Deprecate the adapter
+        PoolRegistryFacet(address(diamond)).deprecateAdapter(address(mockAdapter));
+
+        // Warp past maturity
+        LibAppStorage.CycleInfo memory cycle1 = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, 1);
+        vm.warp(cycle1.maturityDate + 1);
+
+        // Attempt addLiquidity — should revert because ensureActiveCycle blocks new cycle
+        vm.startPrank(user1);
+        vm.expectRevert(abi.encodeWithSelector(LibLiquidity.AdapterDeprecated.selector, address(mockAdapter)));
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+    }
+
+    /**
+     * @notice Deprecated adapter allows liquidity to current active cycle
+     * @dev Graceful wind-down: existing cycle continues normally.
+     */
+    function test_DeprecatedAdapter_AllowsLiquidityToActiveCycle() public {
+        // Start cycle 1
+        vm.startPrank(user1);
+        token0.approve(address(diamond), 2000e18);
+        token1.approve(address(diamond), 2000e18);
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+
+        // Deprecate the adapter
+        PoolRegistryFacet(address(diamond)).deprecateAdapter(address(mockAdapter));
+
+        // Adding liquidity to ACTIVE cycle should still work
+        vm.startPrank(user1);
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+
+        // Cycle is still 1, still active
+        assertEq(PoolRegistryFacet(address(diamond)).getCurrentCycleId(poolId), 1);
+    }
+
+    /**
+     * @notice isPoolFinished returns false for deprecated pool with active cycle
+     */
+    function test_IsPoolFinished_ReturnsFalseForDeprecatedActiveCycle() public {
+        // Start cycle 1
+        vm.startPrank(user1);
+        token0.approve(address(diamond), 1000e18);
+        token1.approve(address(diamond), 1000e18);
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+
+        // Deprecate adapter
+        PoolRegistryFacet(address(diamond)).deprecateAdapter(address(mockAdapter));
+
+        // Cycle still active → not finished
+        assertFalse(PoolRegistryFacet(address(diamond)).isPoolFinished(poolId));
+    }
+
+    /**
+     * @notice isPoolFinished returns true after deprecated adapter's cycle matures
+     */
+    function test_IsPoolFinished_ReturnsTrueForDeprecatedMaturedCycle() public {
+        // Start cycle 1
+        vm.startPrank(user1);
+        token0.approve(address(diamond), 1000e18);
+        token1.approve(address(diamond), 1000e18);
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+
+        // Deprecate adapter
+        PoolRegistryFacet(address(diamond)).deprecateAdapter(address(mockAdapter));
+
+        // Not yet finished
+        assertFalse(PoolRegistryFacet(address(diamond)).isPoolFinished(poolId));
+
+        // Warp past maturity
+        LibAppStorage.CycleInfo memory cycle1 = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, 1);
+        vm.warp(cycle1.maturityDate + 1);
+
+        // Now finished
+        assertTrue(PoolRegistryFacet(address(diamond)).isPoolFinished(poolId));
+    }
+
+    /**
+     * @notice Full E2E: register → addLiq → deprecate → maturity → register with new adapter
+     */
+    function test_RegisterPool_SucceedsAfterDeprecateAndMaturity() public {
+        // Start cycle 1 on pool
+        vm.startPrank(user1);
+        token0.approve(address(diamond), 1000e18);
+        token1.approve(address(diamond), 1000e18);
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+
+        // Deprecate old adapter
+        PoolRegistryFacet(address(diamond)).deprecateAdapter(address(mockAdapter));
+
+        // Warp past maturity
+        LibAppStorage.CycleInfo memory cycle1 = PoolRegistryFacet(address(diamond)).getCycleInfo(poolId, 1);
+        vm.warp(cycle1.maturityDate + 1);
+
+        // Deploy and approve new adapter
+        MockIntegrationAdapter newAdapter = new MockIntegrationAdapter(address(token0), address(token1), address(diamond));
+        PoolRegistryFacet(address(diamond)).approveAdapter(address(newAdapter));
+
+        // Register same underlying with new adapter — should succeed
+        bytes memory poolParams = abi.encode(address(0xB001));
+        bytes32 newPoolId = PoolRegistryFacet(address(diamond)).registerPool(
+            address(newAdapter), poolParams, address(token0)
+        );
+
+        assertTrue(PoolRegistryFacet(address(diamond)).poolExists(newPoolId));
+        assertTrue(newPoolId != poolId);
+
+        // externalToActivePool updated to new pool
+        bytes32 externalPoolId = keccak256(poolParams);
+        assertEq(PoolRegistryFacet(address(diamond)).getActivePoolForExternal(externalPoolId), newPoolId);
+    }
+
+    /**
+     * @notice Re-registration reverts if deprecated pool's cycle is still active
+     */
+    function test_RegisterPool_RevertsIfDeprecatedButCycleActive() public {
+        // Start cycle 1
+        vm.startPrank(user1);
+        token0.approve(address(diamond), 1000e18);
+        token1.approve(address(diamond), 1000e18);
+        LiquidityFacet(address(diamond)).addLiquidity(poolId, 1000e18, 1000e18);
+        vm.stopPrank();
+
+        // Deprecate old adapter
+        PoolRegistryFacet(address(diamond)).deprecateAdapter(address(mockAdapter));
+
+        // Deploy new adapter
+        MockIntegrationAdapter newAdapter = new MockIntegrationAdapter(address(token0), address(token1), address(diamond));
+        PoolRegistryFacet(address(diamond)).approveAdapter(address(newAdapter));
+
+        // Try to register same underlying — should fail (cycle still active)
+        bytes memory poolParams = abi.encode(address(0xB001));
+        bytes32 externalPoolId = keccak256(poolParams);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PoolRegistryFacet.ExternalPoolStillActive.selector, externalPoolId, poolId)
+        );
+        PoolRegistryFacet(address(diamond)).registerPool(address(newAdapter), poolParams, address(token0));
+    }
 }
 
 // ================================================================
@@ -536,5 +704,5 @@ contract MockIntegrationAdapter is ILiquidityAdapter {
         return (0, 0);
     }
 
-    function unlockPosition(bytes calldata) external override returns (uint128, uint256, uint256) { return (0, 0, 0); }
+    function tokenizePosition(bytes calldata) external override returns (uint128, uint256, uint256) { return (0, 0, 0); }
 }

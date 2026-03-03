@@ -59,14 +59,51 @@ This ensures uniqueness across:
 During the active period:
 
 - Users can add liquidity → receive PT + YT
-- Users can unlock existing LP positions → receive PT + YT (via LPUnlockFacet)
+- Users can tokenize existing LP positions → receive PT + YT (via LPTokenizeFacet)
 - Anyone can harvest yield → distributes to YT holders
 - YT holders can claim accumulated yield
 - PT can be traded on YieldForge Market
 
-### 4. Pool Banning (Emergency)
+### 4. Adapter Deprecation (Graceful Wind-Down)
 
-**Who:** Pool Guardian or Owner  
+**Who:** Protocol Owner
+**Function:** `PoolRegistryFacet.deprecateAdapter()`
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                ADAPTER DEPRECATED                        │
+├─────────────────────────────────────────────────────────┤
+│  • Current active cycle runs to completion normally     │
+│  • Users CAN still add liquidity to active cycle        │
+│  • Anyone CAN still harvest yield                       │
+│  • YT holders CAN still claim yield                     │
+│  • PT CAN still be redeemed after maturity              │
+│  • No new cycles start after current cycle matures      │
+│  • Owner can undeprecate via undeprecateAdapter()       │
+└─────────────────────────────────────────────────────────┘
+```
+
+**"Pool Finished" State:**
+
+A pool is considered "finished" when its adapter is deprecated AND either:
+- No cycles were ever started, OR
+- The last cycle has matured (`block.timestamp >= maturityDate`)
+
+Once a pool is finished, the same underlying pool (same `poolParams`) can be re-registered with a new adapter.
+
+**Adapter Transition Flow:**
+```
+1. Deploy new adapter
+2. Approve new adapter
+3. Deprecate old adapter
+4. Wait for current cycle to mature (up to 90 days)
+5. Register same poolParams with new adapter
+6. Users continue with new pool
+```
+
+### 5. Pool Banning (Emergency)
+
+**Who:** Pool Guardian or Owner
 **Function:** `PoolRegistryFacet.banPool()`
 
 ```
@@ -239,9 +276,9 @@ After maturity:
 
 ---
 
-## LP Unlock Flow
+## LP Tokenize Flow
 
-LP Unlock allows users with existing Uniswap V3/V4 full-range positions to convert them into PT/YT tokens in a single transaction, without manually withdrawing and re-depositing.
+LP Tokenize allows users with existing Uniswap V3/V4 full-range positions to convert them into PT/YT tokens in a single transaction, without manually withdrawing and re-depositing.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -250,7 +287,7 @@ LP Unlock allows users with existing Uniswap V3/V4 full-range positions to conve
 │  Prerequisite: User has a full-range LP position        │
 │                User approves NFT to Diamond             │
 │                                                         │
-│  1. User calls unlockPosition(                          │
+│  1. User calls tokenizePosition(                          │
 │       adapter, poolParams, quoteToken,                  │
 │       userTokenId, percentBps                           │
 │     )                                                   │
@@ -279,7 +316,7 @@ LP Unlock allows users with existing Uniswap V3/V4 full-range positions to conve
 ```
 User has a Uniswap V3 WETH/USDC position with 10 ETH + 30,000 USDC
   │
-  ├── Calls unlockPosition(v3Adapter, ..., tokenId, 5000)  // 50%
+  ├── Calls tokenizePosition(v3Adapter, ..., tokenId, 5000)  // 50%
   │
   ├── Adapter withdraws 5 ETH + 15,000 USDC from user's NFT
   │   └── Also collects accumulated swap fees
@@ -305,7 +342,7 @@ User has a Uniswap V3 WETH/USDC position with 10 ETH + 30,000 USDC
 ## Complete User Flow
 
 ```
-Day 0: User deposits 1000 USDC + 1 ETH via addLiquidity() or unlockPosition()
+Day 0: User deposits 1000 USDC + 1 ETH via addLiquidity() or tokenizePosition()
         │
         ├── Total value in quote (USDC): 1000 + 2000 = 3000
         ├── Receives 3000 PT + 3000 YT (18 decimals)
@@ -369,7 +406,12 @@ The key insight: **PT represents a share of the pool, not a fixed token amount**
 When `addLiquidity()` is called after maturity:
 
 ```solidity
-function _ensureActiveCycle(bytes32 poolId) internal {
+function ensureActiveCycle(bytes32 poolId) internal {
+    // Block new cycles on deprecated adapters
+    if (s.deprecatedAdapters[pool.adapter]) {
+        revert AdapterDeprecated(pool.adapter);
+    }
+
     if (block.timestamp >= currentCycle.maturityDate) {
         // Deactivate old cycle
         currentCycle.isActive = false;
@@ -386,3 +428,4 @@ New cycle:
 - Deploys fresh PT + YT tokens
 - Creates new YieldForge Market (PENDING)
 - Old cycle's PT/YT remain valid for redemption/claiming
+- **Not created** if the pool's adapter is deprecated (reverts `AdapterDeprecated`)

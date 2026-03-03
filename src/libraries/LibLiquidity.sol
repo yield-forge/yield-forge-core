@@ -16,7 +16,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
  * @dev Internal library functions are inlined into calling facets at compile time,
  *      sharing the same Diamond storage context via delegatecall.
  *
- * Extracted from LiquidityFacet to enable reuse by LPUnlockFacet.
+ * Extracted from LiquidityFacet to enable reuse by LPTokenizeFacet.
  */
 library LibLiquidity {
     // ============================================================
@@ -43,6 +43,9 @@ library LibLiquidity {
         uint256 poolTvlInQuote
     );
 
+    /// @notice Adapter is deprecated, no new cycles allowed
+    error AdapterDeprecated(address adapter);
+
     // ============================================================
     //                    CYCLE MANAGEMENT
     // ============================================================
@@ -57,10 +60,15 @@ library LibLiquidity {
      */
     function ensureActiveCycle(bytes32 poolId) internal {
         LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
+        LibAppStorage.PoolInfo storage pool = s.pools[poolId];
         uint256 cycleId = s.currentCycleId[poolId];
 
         // Case 1: No cycle yet - create first cycle
         if (cycleId == 0) {
+            // Block new cycles on deprecated adapters
+            if (s.deprecatedAdapters[pool.adapter]) {
+                revert AdapterDeprecated(pool.adapter);
+            }
             startNewCycle(poolId);
             return;
         }
@@ -71,6 +79,11 @@ library LibLiquidity {
         if (block.timestamp >= currentCycle.maturityDate) {
             // Deactivate old cycle
             currentCycle.isActive = false;
+
+            // Block new cycles on deprecated adapters
+            if (s.deprecatedAdapters[pool.adapter]) {
+                revert AdapterDeprecated(pool.adapter);
+            }
 
             // Start new cycle
             startNewCycle(poolId);

@@ -118,6 +118,35 @@ poolId = keccak256(abi.encode(adapter, keccak256(poolParams)))
 4. Caches `quoteDecimals` from `IERC20Metadata(quoteToken).decimals()` for gas efficiency
 5. Stores pool info in `LibAppStorage`
 
+#### Adapter Deprecation
+
+```solidity
+function deprecateAdapter(address adapter) external onlyOwner;
+function undeprecateAdapter(address adapter) external onlyOwner;
+function isAdapterDeprecated(address adapter) external view returns (bool);
+```
+
+Deprecation marks an adapter for graceful wind-down:
+
+- The current active cycle on affected pools runs to completion normally
+- Users can still add liquidity, harvest yield, and trade during the active cycle
+- No new cycles start after the current cycle matures (`ensureActiveCycle` reverts with `AdapterDeprecated`)
+- Redemption and yield claims are never blocked
+
+#### Pool Lifecycle Views
+
+```solidity
+function isPoolFinished(bytes32 poolId) external view returns (bool);
+function getActivePoolForExternal(bytes32 externalPoolId) external view returns (bytes32);
+```
+
+- `isPoolFinished`: Returns `true` if the pool's adapter is deprecated AND either no cycles were ever started or the last cycle has matured
+- `getActivePoolForExternal`: Returns the current active `poolId` for a given underlying pool identity (`externalPoolId = keccak256(poolParams)`)
+
+#### Duplicate Prevention (Adapter Transition)
+
+When registering a new pool, `registerPool` checks if the same underlying pool (same `poolParams`) is already active under a different adapter. Registration is only allowed if the old pool is "finished" (adapter deprecated + last cycle matured or never used). This enables safe adapter upgrades: deprecate old adapter → wait for maturity → register same pool with new adapter.
+
 #### Pool Guardian
 
 ```solidity
@@ -181,6 +210,7 @@ YieldToken(ytToken).mint(user, valueInQuote);
 - Automatically triggered on first `addLiquidity` or when current cycle matures
 - 90-day maturity period
 - Deploys new PT and YT token contracts per cycle
+- Blocked if the pool's adapter is deprecated (reverts `AdapterDeprecated`)
 
 #### Preview Functions (View)
 
@@ -383,9 +413,9 @@ See [06-yield-market.md](./06-yield-market.md) for detailed documentation.
 
 ---
 
-### LPUnlockFacet
+### LPTokenizeFacet
 
-**File:** `src/facets/LPUnlockFacet.sol`
+**File:** `src/facets/LPTokenizeFacet.sol`
 
 Converts existing Uniswap V3/V4 LP positions into PT/YT tokens in a single transaction. Users with full-range positions can "unlock" their capital without manually withdrawing and re-depositing.
 
@@ -400,7 +430,7 @@ Converts existing Uniswap V3/V4 LP positions into PT/YT tokens in a single trans
 #### Unlock Position
 
 ```solidity
-function unlockPosition(
+function tokenizePosition(
     address adapter,
     bytes calldata poolParams,
     address quoteToken,       // used for auto-registration if pool not exists
@@ -422,7 +452,7 @@ function unlockPosition(
 4. Check pool is not banned
 5. Ensure active cycle (create new one if needed)
 6. Transfer NFT from user to adapter
-7. Call `adapter.unlockPosition()` — adapter withdraws from user's position, deposits into protocol position, returns NFT to user
+7. Call `adapter.tokenizePosition()` — adapter withdraws from user's position, deposits into protocol position, returns NFT to user
 8. Update `cycle.totalLiquidity`
 9. Calculate value in quote token via `LibLiquidity.calculateValueInQuote()`
 10. Mint PT/YT to user
@@ -455,7 +485,7 @@ Returns expected PT/YT amounts based on current pool price. Works both for regis
 #### Events
 
 ```solidity
-event LPUnlocked(
+event LPTokenized(
     bytes32 indexed poolId,
     uint256 indexed cycleId,
     address indexed user,
@@ -622,7 +652,7 @@ User
   │                                    │
   │                                    └── mints ──────► PT + YT
   │
-  ├── unlockPosition() ───────► LPUnlockFacet ────────► Adapter.unlockPosition()
+  ├── tokenizePosition() ───────► LPTokenizeFacet ────────► Adapter.tokenizePosition()
   │                                    │
   │                                    └── mints ──────► PT + YT
   │

@@ -82,7 +82,7 @@ contract PoolRegistryFacetTest is Test {
         });
 
         // PoolRegistryFacet
-        bytes4[] memory registrySelectors = new bytes4[](22);
+        bytes4[] memory registrySelectors = new bytes4[](28);
         registrySelectors[0] = PoolRegistryFacet.initialize.selector;
         registrySelectors[1] = PoolRegistryFacet.isInitialized.selector;
         registrySelectors[2] = PoolRegistryFacet.approveAdapter.selector;
@@ -105,6 +105,12 @@ contract PoolRegistryFacetTest is Test {
         registrySelectors[19] = PoolRegistryFacet.getCurrentCycleId.selector;
         registrySelectors[20] = PoolRegistryFacet.getCycleInfo.selector;
         registrySelectors[21] = PoolRegistryFacet.getPoolTokens.selector;
+        registrySelectors[22] = PoolRegistryFacet.deprecateAdapter.selector;
+        registrySelectors[23] = PoolRegistryFacet.undeprecateAdapter.selector;
+        registrySelectors[24] = PoolRegistryFacet.isAdapterDeprecated.selector;
+        registrySelectors[25] = PoolRegistryFacet.isPoolFinished.selector;
+        registrySelectors[26] = PoolRegistryFacet.getActivePoolForExternal.selector;
+        registrySelectors[27] = PoolRegistryFacet.backfillExternalPoolMappings.selector;
         cut[2] = IDiamondCut.FacetCut({
             facetAddress: address(poolRegistryFacet),
             action: IDiamondCut.FacetCutAction.Add,
@@ -400,6 +406,248 @@ contract PoolRegistryFacetTest is Test {
     }
 
     // ================================================================
+    //                 ADAPTER DEPRECATION TESTS
+    // ================================================================
+
+    function test_DeprecateAdapter_SetsFlag() public {
+        registry().initialize(treasury);
+        registry().approveAdapter(address(mockAdapter));
+
+        registry().deprecateAdapter(address(mockAdapter));
+
+        assertTrue(registry().isAdapterDeprecated(address(mockAdapter)));
+        // Also revokes approval
+        assertFalse(registry().isAdapterApproved(address(mockAdapter)));
+    }
+
+    function test_DeprecateAdapter_RevertsForNonOwner() public {
+        registry().initialize(treasury);
+        registry().approveAdapter(address(mockAdapter));
+
+        vm.prank(user);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        registry().deprecateAdapter(address(mockAdapter));
+    }
+
+    function test_DeprecateAdapter_RevertsIfAlreadyDeprecated() public {
+        registry().initialize(treasury);
+        registry().approveAdapter(address(mockAdapter));
+        registry().deprecateAdapter(address(mockAdapter));
+
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.AdapterAlreadyDeprecated.selector, address(mockAdapter)));
+        registry().deprecateAdapter(address(mockAdapter));
+    }
+
+    function test_DeprecateAdapter_RevertsOnZeroAddress() public {
+        vm.expectRevert(PoolRegistryFacet.ZeroAddress.selector);
+        registry().deprecateAdapter(address(0));
+    }
+
+    function test_DeprecateAdapter_WorksEvenIfNotApproved() public {
+        // Can deprecate a revoked adapter (belt and suspenders)
+        registry().initialize(treasury);
+        registry().approveAdapter(address(mockAdapter));
+        registry().revokeAdapter(address(mockAdapter));
+
+        registry().deprecateAdapter(address(mockAdapter));
+        assertTrue(registry().isAdapterDeprecated(address(mockAdapter)));
+    }
+
+    function test_DeprecateAdapter_PreventsNewPoolRegistration() public {
+        registry().initialize(treasury);
+        registry().approveAdapter(address(mockAdapter));
+        registry().approveQuoteToken(address(mockToken0));
+
+        registry().deprecateAdapter(address(mockAdapter));
+
+        // Approval was revoked, so registration fails
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.AdapterNotApproved.selector, address(mockAdapter)));
+        registry().registerPool(address(mockAdapter), abi.encode(address(0xB001)), address(mockToken0));
+    }
+
+    function test_DeprecateAdapter_EmitsEvent() public {
+        registry().initialize(treasury);
+        registry().approveAdapter(address(mockAdapter));
+
+        vm.expectEmit(true, false, false, true, address(diamond));
+        emit PoolRegistryFacet.AdapterDeprecated(address(mockAdapter), true);
+
+        registry().deprecateAdapter(address(mockAdapter));
+    }
+
+    function test_UndeprecateAdapter_ClearsFlag() public {
+        registry().initialize(treasury);
+        registry().approveAdapter(address(mockAdapter));
+        registry().deprecateAdapter(address(mockAdapter));
+
+        registry().undeprecateAdapter(address(mockAdapter));
+
+        assertFalse(registry().isAdapterDeprecated(address(mockAdapter)));
+        // Does NOT re-approve automatically
+        assertFalse(registry().isAdapterApproved(address(mockAdapter)));
+    }
+
+    function test_UndeprecateAdapter_RevertsIfNotDeprecated() public {
+        registry().initialize(treasury);
+
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.AdapterNotDeprecated.selector, address(mockAdapter)));
+        registry().undeprecateAdapter(address(mockAdapter));
+    }
+
+    // ================================================================
+    //             EXTERNAL POOL DUPLICATE PREVENTION TESTS
+    // ================================================================
+
+    function test_RegisterPool_RevertsIfExternalPoolStillActive() public {
+        _setupForPoolRegistration();
+        bytes memory poolParams = abi.encode(address(0xB001));
+
+        // Register pool with adapter1
+        registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
+
+        // Deploy adapter2 for the same underlying
+        MockAdapter adapter2 = new MockAdapter(address(mockToken0), address(mockToken1));
+        registry().approveAdapter(address(adapter2));
+
+        // Try to register same poolParams with adapter2 — should revert
+        bytes32 externalPoolId = keccak256(poolParams);
+        bytes32 existingPoolId = keccak256(abi.encode(address(mockAdapter), poolParams));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PoolRegistryFacet.ExternalPoolStillActive.selector, externalPoolId, existingPoolId)
+        );
+        registry().registerPool(address(adapter2), poolParams, address(mockToken0));
+    }
+
+    function test_RegisterPool_SucceedsForDeprecatedNeverUsedPool() public {
+        _setupForPoolRegistration();
+        bytes memory poolParams = abi.encode(address(0xB001));
+
+        // Register pool (never addLiquidity → cycleId = 0)
+        bytes32 oldPoolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
+        assertTrue(registry().poolExists(oldPoolId));
+
+        // Deprecate old adapter
+        registry().deprecateAdapter(address(mockAdapter));
+
+        // Deploy adapter2 and register same underlying — should succeed (no cycles = finished)
+        MockAdapter adapter2 = new MockAdapter(address(mockToken0), address(mockToken1));
+        registry().approveAdapter(address(adapter2));
+
+        bytes32 newPoolId = registry().registerPool(address(adapter2), poolParams, address(mockToken0));
+        assertTrue(registry().poolExists(newPoolId));
+        assertTrue(newPoolId != oldPoolId);
+
+        // externalToActivePool now points to new pool
+        bytes32 externalPoolId = keccak256(poolParams);
+        assertEq(registry().getActivePoolForExternal(externalPoolId), newPoolId);
+    }
+
+    function test_IsPoolFinished_ReturnsFalseForActivePool() public {
+        bytes32 poolId = _registerTestPool();
+
+        // Not deprecated → not finished
+        assertFalse(registry().isPoolFinished(poolId));
+    }
+
+    function test_IsPoolFinished_ReturnsTrueForDeprecatedNoCycles() public {
+        bytes32 poolId = _registerTestPool();
+
+        registry().deprecateAdapter(address(mockAdapter));
+
+        // Deprecated + no cycles = finished
+        assertTrue(registry().isPoolFinished(poolId));
+    }
+
+    function test_IsPoolFinished_ReturnsFalseForNonexistentPool() public {
+        assertFalse(registry().isPoolFinished(bytes32(uint256(0xDEAD))));
+    }
+
+    function test_GetActivePoolForExternal_ReturnsCorrectPoolId() public {
+        _setupForPoolRegistration();
+        bytes memory poolParams = abi.encode(address(0xB001));
+
+        bytes32 poolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
+        bytes32 externalPoolId = keccak256(poolParams);
+
+        assertEq(registry().getActivePoolForExternal(externalPoolId), poolId);
+    }
+
+    function test_GetActivePoolForExternal_ReturnsZeroForUnknown() public {
+        assertEq(registry().getActivePoolForExternal(bytes32(uint256(0x1234))), bytes32(0));
+    }
+
+    function test_RegisterPool_SetsExternalToActivePool() public {
+        _setupForPoolRegistration();
+        bytes memory poolParams = abi.encode(address(0xB001));
+
+        bytes32 poolId = registry().registerPool(address(mockAdapter), poolParams, address(mockToken0));
+        bytes32 externalPoolId = keccak256(poolParams);
+
+        // Verify mapping was set
+        assertEq(registry().getActivePoolForExternal(externalPoolId), poolId);
+    }
+
+    // ================================================================
+    //                BACKFILL MIGRATION TESTS
+    // ================================================================
+
+    function test_BackfillExternalPoolMappings_SetsMapping() public {
+        bytes32 poolId = _registerTestPool();
+        bytes memory poolParams = abi.encode(address(0xB001));
+        bytes32 externalPoolId = keccak256(poolParams);
+
+        // Simulate empty mapping (as if pool was registered before upgrade)
+        // The mapping was already set by registerPool, so verify it works
+        assertEq(registry().getActivePoolForExternal(externalPoolId), poolId);
+
+        // Backfill should be idempotent — no revert on second call
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = poolId;
+        registry().backfillExternalPoolMappings(ids);
+
+        assertEq(registry().getActivePoolForExternal(externalPoolId), poolId);
+    }
+
+    function test_BackfillExternalPoolMappings_RevertsForNonOwner() public {
+        bytes32 poolId = _registerTestPool();
+
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = poolId;
+
+        vm.prank(user);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        registry().backfillExternalPoolMappings(ids);
+    }
+
+    function test_BackfillExternalPoolMappings_RevertsForNonexistentPool() public {
+        _setupForPoolRegistration();
+
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = bytes32(uint256(0xDEAD));
+
+        vm.expectRevert(abi.encodeWithSelector(PoolRegistryFacet.PoolNotFound.selector, ids[0]));
+        registry().backfillExternalPoolMappings(ids);
+    }
+
+    function test_BackfillExternalPoolMappings_MultiplePoolsAtOnce() public {
+        _setupForPoolRegistration();
+
+        bytes memory params1 = abi.encode(address(0xB001));
+        bytes memory params2 = abi.encode(address(0xB002));
+        bytes32 poolId1 = registry().registerPool(address(mockAdapter), params1, address(mockToken0));
+        bytes32 poolId2 = registry().registerPool(address(mockAdapter), params2, address(mockToken0));
+
+        bytes32[] memory ids = new bytes32[](2);
+        ids[0] = poolId1;
+        ids[1] = poolId2;
+        registry().backfillExternalPoolMappings(ids);
+
+        assertEq(registry().getActivePoolForExternal(keccak256(params1)), poolId1);
+        assertEq(registry().getActivePoolForExternal(keccak256(params2)), poolId2);
+    }
+
+    // ================================================================
     //                        HELPERS
     // ================================================================
 
@@ -501,7 +749,7 @@ contract MockAdapter is ILiquidityAdapter {
         return (0, 0);
     }
 
-    function unlockPosition(bytes calldata) external override returns (uint128, uint256, uint256) { return (0, 0, 0); }
+    function tokenizePosition(bytes calldata) external override returns (uint128, uint256, uint256) { return (0, 0, 0); }
 }
 
 /**

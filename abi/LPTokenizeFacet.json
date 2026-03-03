@@ -1,7 +1,7 @@
 [
   {
     "type": "function",
-    "name": "previewUnlockPosition",
+    "name": "previewTokenizePosition",
     "inputs": [
       {
         "name": "adapter",
@@ -40,7 +40,7 @@
   },
   {
     "type": "function",
-    "name": "unlockPosition",
+    "name": "tokenizePosition",
     "inputs": [
       {
         "name": "adapter",
@@ -84,7 +84,7 @@
   },
   {
     "type": "event",
-    "name": "LPUnlocked",
+    "name": "LPTokenized",
     "inputs": [
       {
         "name": "poolId",
@@ -234,6 +234,17 @@
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AdapterDeprecated",
+    "inputs": [
+      {
+        "name": "adapter",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",

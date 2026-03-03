@@ -8,7 +8,7 @@ import {DiamondLoupeFacet} from "../src/facets/DiamondLoupeFacet.sol";
 import {OwnershipFacet} from "../src/facets/OwnershipFacet.sol";
 import {PoolRegistryFacet} from "../src/facets/PoolRegistryFacet.sol";
 import {LiquidityFacet} from "../src/facets/LiquidityFacet.sol";
-import {LPUnlockFacet} from "../src/facets/LPUnlockFacet.sol";
+import {LPTokenizeFacet} from "../src/facets/LPTokenizeFacet.sol";
 import {PauseFacet} from "../src/facets/PauseFacet.sol";
 import {YieldAccumulatorFacet} from "../src/facets/YieldAccumulatorFacet.sol";
 import {IDiamondCut} from "../src/interfaces/IDiamondCut.sol";
@@ -20,21 +20,21 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /**
- * @title LPUnlockFacetTest
- * @notice Tests for LPUnlockFacet — LP position to PT/YT conversion
+ * @title LPTokenizeFacetTest
+ * @notice Tests for LPTokenizeFacet — LP position to PT/YT conversion
  */
-contract LPUnlockFacetTest is Test {
+contract LPTokenizeFacetTest is Test {
     Diamond diamond;
     DiamondCutFacet diamondCutFacet;
     DiamondLoupeFacet diamondLoupeFacet;
     OwnershipFacet ownershipFacet;
     PoolRegistryFacet poolRegistryFacet;
     LiquidityFacet liquidityFacet;
-    LPUnlockFacet lpUnlockFacet;
+    LPTokenizeFacet lpTokenizeFacet;
     PauseFacet pauseFacet;
     YieldAccumulatorFacet yieldAccumulatorFacet;
 
-    MockUnlockAdapter mockAdapter;
+    MockTokenizeAdapter mockAdapter;
     MockNFT mockNft;
     MockERC20Unlock token0;
     MockERC20Unlock token1;
@@ -62,12 +62,12 @@ contract LPUnlockFacetTest is Test {
         ownershipFacet = new OwnershipFacet();
         poolRegistryFacet = new PoolRegistryFacet();
         liquidityFacet = new LiquidityFacet();
-        lpUnlockFacet = new LPUnlockFacet();
+        lpTokenizeFacet = new LPTokenizeFacet();
         pauseFacet = new PauseFacet();
         yieldAccumulatorFacet = new YieldAccumulatorFacet();
 
         // Deploy mock adapter
-        mockAdapter = new MockUnlockAdapter(
+        mockAdapter = new MockTokenizeAdapter(
             address(token0), address(token1), address(diamond), address(mockNft)
         );
 
@@ -134,12 +134,12 @@ contract LPUnlockFacetTest is Test {
             functionSelectors: liquiditySelectors
         });
 
-        // LPUnlockFacet
+        // LPTokenizeFacet
         bytes4[] memory unlockSelectors = new bytes4[](2);
-        unlockSelectors[0] = LPUnlockFacet.unlockPosition.selector;
-        unlockSelectors[1] = LPUnlockFacet.previewUnlockPosition.selector;
+        unlockSelectors[0] = LPTokenizeFacet.tokenizePosition.selector;
+        unlockSelectors[1] = LPTokenizeFacet.previewTokenizePosition.selector;
         cut[4] = IDiamondCut.FacetCut({
-            facetAddress: address(lpUnlockFacet),
+            facetAddress: address(lpTokenizeFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: unlockSelectors
         });
@@ -188,8 +188,8 @@ contract LPUnlockFacetTest is Test {
     }
 
     // Shorthand helpers
-    function unlock() internal view returns (LPUnlockFacet) {
-        return LPUnlockFacet(address(diamond));
+    function tokenize() internal view returns (LPTokenizeFacet) {
+        return LPTokenizeFacet(address(diamond));
     }
 
     function pause() internal view returns (PauseFacet) {
@@ -208,7 +208,7 @@ contract LPUnlockFacetTest is Test {
     //                    VALIDATION TESTS
     // ================================================================
 
-    function test_UnlockPosition_RevertsWhenPaused() public {
+    function test_TokenizePosition_RevertsWhenPaused() public {
         // Register pool first so we can test pause
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
@@ -218,29 +218,29 @@ contract LPUnlockFacetTest is Test {
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         vm.expectRevert(); // LibPause reverts
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
-    function test_UnlockPosition_RevertsOnZeroPercent() public {
+    function test_TokenizePosition_RevertsOnZeroPercent() public {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
-        vm.expectRevert(abi.encodeWithSelector(LPUnlockFacet.InvalidPercentBps.selector, uint16(0)));
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 0);
+        vm.expectRevert(abi.encodeWithSelector(LPTokenizeFacet.InvalidPercentBps.selector, uint16(0)));
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 0);
         vm.stopPrank();
     }
 
-    function test_UnlockPosition_RevertsOnPercentOver10000() public {
+    function test_TokenizePosition_RevertsOnPercentOver10000() public {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
-        vm.expectRevert(abi.encodeWithSelector(LPUnlockFacet.InvalidPercentBps.selector, uint16(10001)));
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10001);
+        vm.expectRevert(abi.encodeWithSelector(LPTokenizeFacet.InvalidPercentBps.selector, uint16(10001)));
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10001);
         vm.stopPrank();
     }
 
-    function test_UnlockPosition_RevertsOnBannedPool() public {
+    function test_TokenizePosition_RevertsOnBannedPool() public {
         // Register and ban pool
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
         registry().banPool(poolId);
@@ -248,15 +248,15 @@ contract LPUnlockFacetTest is Test {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
-        vm.expectRevert(abi.encodeWithSelector(LPUnlockFacet.PoolBanned.selector, poolId));
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        vm.expectRevert(abi.encodeWithSelector(LPTokenizeFacet.PoolBanned.selector, poolId));
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
-    function test_UnlockPosition_RevertsOnZeroLiquidityReturned() public {
+    function test_TokenizePosition_RevertsOnZeroLiquidityReturned() public {
         // Create adapter that returns zero liquidity
-        MockUnlockAdapterZeroLiq zeroAdapter =
-            new MockUnlockAdapterZeroLiq(address(token0), address(token1), address(diamond), address(mockNft));
+        MockTokenizeAdapterZeroLiq zeroAdapter =
+            new MockTokenizeAdapterZeroLiq(address(token0), address(token1), address(diamond), address(mockNft));
         PoolRegistryFacet(address(diamond)).approveAdapter(address(zeroAdapter));
 
         bytes memory zeroPoolParams = abi.encode(address(0xC001));
@@ -265,8 +265,8 @@ contract LPUnlockFacetTest is Test {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
-        vm.expectRevert(LPUnlockFacet.ZeroLiquidityReturned.selector);
-        unlock().unlockPosition(address(zeroAdapter), zeroPoolParams, address(token0), USER_TOKEN_ID, 10000);
+        vm.expectRevert(LPTokenizeFacet.ZeroLiquidityReturned.selector);
+        tokenize().tokenizePosition(address(zeroAdapter), zeroPoolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
@@ -274,7 +274,7 @@ contract LPUnlockFacetTest is Test {
     //                  AUTO-REGISTRATION TESTS
     // ================================================================
 
-    function test_UnlockPosition_AutoRegistersPool() public {
+    function test_TokenizePosition_AutoRegistersPool() public {
         // Pool should NOT exist yet
         assertFalse(registry().poolExists(poolId));
 
@@ -282,7 +282,7 @@ contract LPUnlockFacetTest is Test {
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         (uint256 pt, uint256 yt) =
-            unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+            tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         // Pool should now exist
@@ -291,7 +291,7 @@ contract LPUnlockFacetTest is Test {
         assertGt(yt, 0);
     }
 
-    function test_UnlockPosition_SkipsRegistrationIfPoolExists() public {
+    function test_TokenizePosition_SkipsRegistrationIfPoolExists() public {
         // Pre-register pool
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
         assertTrue(registry().poolExists(poolId));
@@ -301,23 +301,23 @@ contract LPUnlockFacetTest is Test {
 
         // Should succeed without trying to re-register
         (uint256 pt, uint256 yt) =
-            unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+            tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         assertGt(pt, 0);
         assertGt(yt, 0);
     }
 
-    function test_UnlockPosition_AutoRegistrationFailsBubbles() public {
+    function test_TokenizePosition_AutoRegistrationFailsBubbles() public {
         // Use an unapproved adapter — registration should fail
-        MockUnlockAdapter unapprovedAdapter =
-            new MockUnlockAdapter(address(token0), address(token1), address(diamond), address(mockNft));
+        MockTokenizeAdapter unapprovedAdapter =
+            new MockTokenizeAdapter(address(token0), address(token1), address(diamond), address(mockNft));
 
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         vm.expectRevert(); // PoolRegistrationFailed wrapping AdapterNotApproved
-        unlock().unlockPosition(address(unapprovedAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(unapprovedAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
@@ -325,12 +325,12 @@ contract LPUnlockFacetTest is Test {
     //                    CORE FLOW TESTS
     // ================================================================
 
-    function test_UnlockPosition_FullUnlock_CreatesCycleAndMints() public {
+    function test_TokenizePosition_FullUnlock_CreatesCycleAndMints() public {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         (uint256 ptAmount, uint256 ytAmount) =
-            unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+            tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         // Should have created cycle 1
@@ -347,18 +347,18 @@ contract LPUnlockFacetTest is Test {
         assertEq(ptAmount, ytAmount); // PT and YT minted equally
     }
 
-    function test_UnlockPosition_PartialUnlock_50Percent() public {
+    function test_TokenizePosition_PartialUnlock_50Percent() public {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         (uint256 ptFull,) =
-            unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+            tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         // Deploy a second test with 50%
         MockNFT mockNft2 = new MockNFT();
-        MockUnlockAdapter mockAdapter2 =
-            new MockUnlockAdapter(address(token0), address(token1), address(diamond), address(mockNft2));
+        MockTokenizeAdapter mockAdapter2 =
+            new MockTokenizeAdapter(address(token0), address(token1), address(diamond), address(mockNft2));
 
         PoolRegistryFacet(address(diamond)).approveAdapter(address(mockAdapter2));
         token0.mint(address(mockAdapter2), 10000e18);
@@ -372,21 +372,21 @@ contract LPUnlockFacetTest is Test {
         mockNft2.approve(address(diamond), 99);
 
         (uint256 ptHalf,) =
-            unlock().unlockPosition(address(mockAdapter2), poolParams2, address(token0), 99, 5000);
+            tokenize().tokenizePosition(address(mockAdapter2), poolParams2, address(token0), 99, 5000);
         vm.stopPrank();
 
         // 50% should give approximately half the PT (mock returns proportional amounts)
         assertEq(ptHalf, ptFull / 2);
     }
 
-    function test_UnlockPosition_UpdatesTotalLiquidity() public {
+    function test_TokenizePosition_UpdatesTotalLiquidity() public {
         // Pre-register pool
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         // Total liquidity should be updated
@@ -394,18 +394,18 @@ contract LPUnlockFacetTest is Test {
         assertGt(total, 0);
     }
 
-    function test_UnlockPosition_NFTTransferredBackToUser() public {
+    function test_TokenizePosition_NFTTransferredBackToUser() public {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         // NFT should be back with the user (mock adapter returns it)
         assertEq(mockNft.ownerOf(USER_TOKEN_ID), user);
     }
 
-    function test_UnlockPosition_DustRefundedToUser() public {
+    function test_TokenizePosition_DustRefundedToUser() public {
         // Adapter leaves some dust on Diamond
         // After unlock, dust should be refunded to user
         uint256 userToken0Before = token0.balanceOf(user);
@@ -414,7 +414,7 @@ contract LPUnlockFacetTest is Test {
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         // Mock adapter sends 1e18 dust to Diamond for each token
@@ -430,7 +430,7 @@ contract LPUnlockFacetTest is Test {
     //                      EVENT TESTS
     // ================================================================
 
-    function test_UnlockPosition_EmitsLPUnlockedEvent() public {
+    function test_TokenizePosition_EmitsLPTokenizedEvent() public {
         // Pre-register pool
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
@@ -438,9 +438,9 @@ contract LPUnlockFacetTest is Test {
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         vm.expectEmit(true, true, true, false);
-        emit LPUnlockFacet.LPUnlocked(poolId, 1, user, USER_TOKEN_ID, 10000, 0, 0, 0);
+        emit LPTokenizeFacet.LPTokenized(poolId, 1, user, USER_TOKEN_ID, 10000, 0, 0, 0);
 
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
@@ -448,18 +448,18 @@ contract LPUnlockFacetTest is Test {
     //                  CRITICAL EDGE CASES
     // ================================================================
 
-    function test_UnlockPosition_RevertsWhenNFTNotApproved() public {
+    function test_TokenizePosition_RevertsWhenNFTNotApproved() public {
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         vm.startPrank(user);
         // Deliberately NOT approving the NFT
 
         vm.expectRevert(); // transferFrom should revert
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
-    function test_UnlockPosition_RevertsWhenCallerDoesNotOwnNFT() public {
+    function test_TokenizePosition_RevertsWhenCallerDoesNotOwnNFT() public {
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         address attacker = address(0xBAD);
@@ -469,17 +469,17 @@ contract LPUnlockFacetTest is Test {
         // transferFrom(attacker -> adapter) should fail because attacker != owner
 
         vm.expectRevert(); // "Not owner" from MockNFT
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
-    function test_UnlockPosition_MultipleUnlocksAccumulateLiquidity() public {
+    function test_TokenizePosition_MultipleUnlocksAccumulateLiquidity() public {
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         // First unlock
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         uint128 totalAfterFirst = liquidity().getTotalLiquidity(poolId);
@@ -491,7 +491,7 @@ contract LPUnlockFacetTest is Test {
 
         vm.startPrank(user2);
         mockNft.approve(address(diamond), tokenId2);
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), tokenId2, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), tokenId2, 10000);
         vm.stopPrank();
 
         uint128 totalAfterSecond = liquidity().getTotalLiquidity(poolId);
@@ -500,13 +500,13 @@ contract LPUnlockFacetTest is Test {
         assertEq(totalAfterSecond, totalAfterFirst * 2);
     }
 
-    function test_UnlockPosition_CreatesNewCycleAfterMaturity() public {
+    function test_TokenizePosition_CreatesNewCycleAfterMaturity() public {
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         // First unlock — creates cycle 1
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         assertEq(registry().getCurrentCycleId(poolId), 1);
@@ -522,7 +522,7 @@ contract LPUnlockFacetTest is Test {
 
         vm.startPrank(user2);
         mockNft.approve(address(diamond), tokenId2);
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), tokenId2, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), tokenId2, 10000);
         vm.stopPrank();
 
         assertEq(registry().getCurrentCycleId(poolId), 2);
@@ -532,7 +532,7 @@ contract LPUnlockFacetTest is Test {
         assertTrue(ptCycle1 != ptCycle2);
     }
 
-    function test_UnlockPosition_MinimumPercent_1Bps() public {
+    function test_TokenizePosition_MinimumPercent_1Bps() public {
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         vm.startPrank(user);
@@ -540,7 +540,7 @@ contract LPUnlockFacetTest is Test {
 
         // 1 bps = 0.01% — should succeed but return very small amounts
         (uint256 pt, uint256 yt) =
-            unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 1);
+            tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 1);
         vm.stopPrank();
 
         // With FULL_LIQUIDITY = 1000e6, 0.01% = 100000 (100_000 units)
@@ -549,25 +549,25 @@ contract LPUnlockFacetTest is Test {
         assertGt(yt, 0);
     }
 
-    function test_UnlockPosition_AutoRegistrationFailsWithUnapprovedQuoteToken() public {
+    function test_TokenizePosition_AutoRegistrationFailsWithUnapprovedQuoteToken() public {
         // token1 is NOT an approved quote token
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         // Auto-registration with unapproved quoteToken should fail
         vm.expectRevert(); // PoolRegistrationFailed wrapping QuoteTokenNotApproved
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token1), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token1), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 
-    function test_UnlockPosition_PTYTAmountsAreConsistentWithValueCalculation() public {
+    function test_TokenizePosition_PTYTAmountsAreConsistentWithValueCalculation() public {
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         (uint256 ptAmount, uint256 ytAmount) =
-            unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+            tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         // MockAdapter returns 500e18 of each token at 1:1 price (sqrtPriceX96 = 2^96)
@@ -578,7 +578,7 @@ contract LPUnlockFacetTest is Test {
         assertEq(ptAmount, ytAmount);
     }
 
-    function test_UnlockPosition_CombinedWithAddLiquidity_SamePool() public {
+    function test_TokenizePosition_CombinedWithAddLiquidity_SamePool() public {
         registry().registerPool(address(mockAdapter), poolParams, address(token0));
 
         // First: regular addLiquidity
@@ -597,7 +597,7 @@ contract LPUnlockFacetTest is Test {
         // Second: unlock position into same pool
         vm.startPrank(user);
         mockNft.approve(address(diamond), USER_TOKEN_ID);
-        unlock().unlockPosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(mockAdapter), poolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
 
         uint128 totalAfterUnlock = liquidity().getTotalLiquidity(poolId);
@@ -610,10 +610,10 @@ contract LPUnlockFacetTest is Test {
     //                    REENTRANCY TEST
     // ================================================================
 
-    function test_UnlockPosition_RevertsOnReentrantCall() public {
+    function test_TokenizePosition_RevertsOnReentrantCall() public {
         // Deploy reentrant adapter
-        ReentrantUnlockAdapter reentrantAdapter =
-            new ReentrantUnlockAdapter(address(token0), address(token1), address(diamond), address(mockNft));
+        ReentrantTokenizeAdapter reentrantAdapter =
+            new ReentrantTokenizeAdapter(address(token0), address(token1), address(diamond), address(mockNft));
         PoolRegistryFacet(address(diamond)).approveAdapter(address(reentrantAdapter));
         token0.mint(address(reentrantAdapter), 10000e18);
         token1.mint(address(reentrantAdapter), 10000e18);
@@ -624,7 +624,7 @@ contract LPUnlockFacetTest is Test {
         mockNft.approve(address(diamond), USER_TOKEN_ID);
 
         vm.expectRevert(); // Reentrancy guard should catch it
-        unlock().unlockPosition(address(reentrantAdapter), rePoolParams, address(token0), USER_TOKEN_ID, 10000);
+        tokenize().tokenizePosition(address(reentrantAdapter), rePoolParams, address(token0), USER_TOKEN_ID, 10000);
         vm.stopPrank();
     }
 }
@@ -681,16 +681,16 @@ contract MockNFT {
 }
 
 /**
- * @notice Mock adapter that simulates unlock operations
+ * @notice Mock adapter that simulates tokenize operations
  * @dev Returns configurable liquidity/amounts, transfers NFT back, sends dust
  */
-contract MockUnlockAdapter is ILiquidityAdapter {
+contract MockTokenizeAdapter is ILiquidityAdapter {
     address public immutable token0;
     address public immutable token1;
     address public immutable diamond;
     address public immutable nft;
 
-    // Default return values for 100% unlock
+    // Default return values for 100% tokenize
     uint128 public constant FULL_LIQUIDITY = 1000e6;
     uint256 public constant FULL_AMOUNT0 = 500e18;
     uint256 public constant FULL_AMOUNT1 = 500e18;
@@ -703,13 +703,13 @@ contract MockUnlockAdapter is ILiquidityAdapter {
         nft = _nft;
     }
 
-    function unlockPosition(bytes calldata unlockParams)
+    function tokenizePosition(bytes calldata tokenizeParams)
         external
         override
         returns (uint128 liquidity, uint256 amount0, uint256 amount1)
     {
         (, uint256 userTokenId, uint16 percentBps, address user) =
-            abi.decode(unlockParams, (bytes, uint256, uint16, address));
+            abi.decode(tokenizeParams, (bytes, uint256, uint16, address));
 
         // Calculate proportional amounts based on percent
         liquidity = uint128(uint256(FULL_LIQUIDITY) * percentBps / 10000);
@@ -816,9 +816,9 @@ contract MockUnlockAdapter is ILiquidityAdapter {
 }
 
 /**
- * @notice Adapter that returns zero liquidity (for error testing)
+ * @notice Mock adapter that returns zero liquidity (for error testing)
  */
-contract MockUnlockAdapterZeroLiq is ILiquidityAdapter {
+contract MockTokenizeAdapterZeroLiq is ILiquidityAdapter {
     address public immutable token0;
     address public immutable token1;
     address public immutable diamond;
@@ -831,13 +831,13 @@ contract MockUnlockAdapterZeroLiq is ILiquidityAdapter {
         nft = _nft;
     }
 
-    function unlockPosition(bytes calldata unlockParams)
+    function tokenizePosition(bytes calldata tokenizeParams)
         external
         override
         returns (uint128, uint256, uint256)
     {
         (, uint256 userTokenId,, address user) =
-            abi.decode(unlockParams, (bytes, uint256, uint16, address));
+            abi.decode(tokenizeParams, (bytes, uint256, uint16, address));
         MockNFT(nft).transferFrom(address(this), user, userTokenId);
         return (0, 0, 0); // Zero liquidity
     }
@@ -896,9 +896,9 @@ contract MockUnlockAdapterZeroLiq is ILiquidityAdapter {
 }
 
 /**
- * @notice Adapter that attempts to re-enter the Diamond during unlock
+ * @notice Adapter that attempts to re-enter the Diamond during tokenize
  */
-contract ReentrantUnlockAdapter is ILiquidityAdapter {
+contract ReentrantTokenizeAdapter is ILiquidityAdapter {
     address public immutable token0;
     address public immutable token1;
     address public immutable diamond;
@@ -911,14 +911,14 @@ contract ReentrantUnlockAdapter is ILiquidityAdapter {
         nft = _nft;
     }
 
-    function unlockPosition(bytes calldata unlockParams)
+    function tokenizePosition(bytes calldata tokenizeParams)
         external
         override
         returns (uint128, uint256, uint256)
     {
         // Attempt to re-enter the Diamond
         bytes memory rePoolParams = abi.encode(address(0xD001));
-        LPUnlockFacet(diamond).unlockPosition(
+        LPTokenizeFacet(diamond).tokenizePosition(
             address(this), rePoolParams, token0, 99, 10000
         );
         return (1000, 500e18, 500e18);

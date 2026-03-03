@@ -98,14 +98,14 @@ interface ILiquidityAdapter {
     // ============================================================
 
     /**
-     * @notice Emitted when a user's existing LP position is unlocked into the protocol
+     * @notice Emitted when a user's existing LP position is tokenized into the protocol
      * @param user Address of the position owner
      * @param userTokenId NFT token ID of the user's position
      * @param liquidity LP units added to the protocol's position
      * @param amount0 Token0 amount deposited into protocol
      * @param amount1 Token1 amount deposited into protocol
      */
-    event PositionUnlocked(
+    event PositionTokenized(
         address indexed user,
         uint256 indexed userTokenId,
         uint128 liquidity,
@@ -114,16 +114,16 @@ interface ILiquidityAdapter {
     );
 
     /**
-     * @notice Unlock a user's existing LP position into the protocol
+     * @notice Tokenize a user's existing LP position into the protocol
      * @dev Withdraws liquidity (and accumulated fees) from the user's position
      *      and deposits it into the protocol's aggregated full-range position.
      *
      * The adapter must:
      * 1. Validate the user's position is full-range for the correct pool
-     * 2. Calculate the portion of liquidity to unlock based on percentBps
+     * 2. Calculate the portion of liquidity to tokenize based on percentBps
      * 3. Decrease liquidity on the user's position (collecting accumulated fees)
      * 4. Add the received tokens to the protocol's own position
-     * 5. Return the user's NFT if partial unlock
+     * 5. Return the user's NFT if partial tokenization
      *
      * The user's NFT must already be transferred to the adapter by the calling facet.
      * The adapter must transfer it back to the user after the operation.
@@ -133,12 +133,12 @@ interface ILiquidityAdapter {
      * - V3 poolParams: abi.encode(address pool)
      * - V4 poolParams: abi.encode(PoolKey)
      *
-     * @param unlockParams Adapter-specific encoded parameters
+     * @param tokenizeParams Adapter-specific encoded parameters
      * @return liquidity LP units added to the protocol's position
      * @return amount0 Token0 amount deposited into protocol
      * @return amount1 Token1 amount deposited into protocol
      */
-    function unlockPosition(bytes calldata unlockParams)
+    function tokenizePosition(bytes calldata tokenizeParams)
         external
         returns (uint128 liquidity, uint256 amount0, uint256 amount1);
 
@@ -373,7 +373,7 @@ interface ILiquidityAdapter {
 
     /**
      * @notice Get the address of the NFT contract managing LP positions
-     * @dev Used by LPUnlockFacet to transfer user's NFT to the adapter
+     * @dev Used by LPTokenizeFacet to transfer user's NFT to the adapter
      *
      * Examples:
      * - UniswapV3Adapter: NonfungiblePositionManager address

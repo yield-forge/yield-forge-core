@@ -17,30 +17,30 @@ interface IERC721Minimal {
 }
 
 /**
- * @title LPUnlockFacet
+ * @title LPTokenizeFacet
  * @author Yield Forge Team
  * @notice Converts existing LP positions to PT/YT tokens in one transaction
  * @dev Thin coordinator facet that orchestrates:
  *      1. Auto-registration of the pool (if not yet registered)
  *      2. Active cycle management
  *      3. NFT transfer from user to adapter
- *      4. adapter.unlockPosition() call
+ *      4. adapter.tokenizePosition() call
  *      5. PT/YT minting
  *      6. Dust token refunds
  *
  * USE CASES:
- * - Young projects: unlock treasury LP capital (sell PT for working capital)
+ * - Young projects: tokenize treasury LP capital (sell PT for working capital)
  * - Market makers: get tradeable PT/YT instruments without closing positions
  * - Regular LPs: monetize locked positions via secondary markets
  *
  * REQUIREMENTS:
  * - User must approve their LP NFT to the Diamond contract before calling
  * - Only full-range positions are supported
- * - Supports partial unlock via percentBps (1-10000)
+ * - Supports partial tokenization via percentBps (1-10000)
  *
  * FLOW:
  * 1. User approves NFT to Diamond
- * 2. User calls unlockPosition(adapter, poolParams, quoteToken, tokenId, percentBps)
+ * 2. User calls tokenizePosition(adapter, poolParams, quoteToken, tokenId, percentBps)
  * 3. Facet auto-registers pool if needed (self-call through Diamond dispatch)
  * 4. Facet ensures active cycle exists
  * 5. Facet transfers NFT from user to adapter
@@ -49,7 +49,7 @@ interface IERC721Minimal {
  * 8. Facet: mints PT/YT based on value deposited
  * 9. Facet: refunds any dust tokens to user
  */
-contract LPUnlockFacet {
+contract LPTokenizeFacet {
     using SafeERC20 for IERC20;
 
     // ============================================================
@@ -57,17 +57,17 @@ contract LPUnlockFacet {
     // ============================================================
 
     /**
-     * @notice Emitted when an LP position is unlocked into PT/YT
+     * @notice Emitted when an LP position is tokenized into PT/YT
      * @param poolId Pool identifier
      * @param cycleId Active cycle number
-     * @param user Address that unlocked their position
+     * @param user Address that tokenized their position
      * @param userTokenId NFT token ID of the LP position
-     * @param percentBps Percentage of position unlocked (1-10000)
+     * @param percentBps Percentage of position tokenized (1-10000)
      * @param liquidity LP units added to protocol position
      * @param ptMinted PT tokens minted to user
      * @param ytMinted YT tokens minted to user
      */
-    event LPUnlocked(
+    event LPTokenized(
         bytes32 indexed poolId,
         uint256 indexed cycleId,
         address indexed user,
@@ -99,7 +99,7 @@ contract LPUnlockFacet {
     // ============================================================
 
     /**
-     * @notice Unlock an existing LP position into PT/YT tokens
+     * @notice Tokenize an existing LP position into PT/YT tokens
      * @dev One-click conversion: auto-registers pool, manages cycles, mints tokens
      *
      * IMPORTANT: User must approve their LP NFT to the Diamond before calling!
@@ -108,11 +108,11 @@ contract LPUnlockFacet {
      * @param poolParams Encoded pool parameters (adapter-specific)
      * @param quoteToken Quote token address (used for auto-registration if pool not exists)
      * @param userTokenId NFT token ID of the user's LP position
-     * @param percentBps Percentage of position to unlock (1 = 0.01%, 10000 = 100%)
+     * @param percentBps Percentage of position to tokenize (1 = 0.01%, 10000 = 100%)
      * @return ptAmount PT tokens minted to user
      * @return ytAmount YT tokens minted to user
      */
-    function unlockPosition(
+    function tokenizePosition(
         address adapter,
         bytes calldata poolParams,
         address quoteToken,
@@ -167,9 +167,9 @@ contract LPUnlockFacet {
         IERC721Minimal(nftContract).transferFrom(msg.sender, adapter, userTokenId);
 
         // ===== CALL ADAPTER =====
-        bytes memory unlockParams = abi.encode(poolParams, userTokenId, percentBps, msg.sender);
+        bytes memory tokenizeParams = abi.encode(poolParams, userTokenId, percentBps, msg.sender);
         (uint128 liquidityReceived, uint256 amount0, uint256 amount1) =
-            ILiquidityAdapter(adapter).unlockPosition(unlockParams);
+            ILiquidityAdapter(adapter).tokenizePosition(tokenizeParams);
 
         if (liquidityReceived == 0) {
             revert ZeroLiquidityReturned();
@@ -194,7 +194,7 @@ contract LPUnlockFacet {
         _refundDust(pool.token1, msg.sender);
 
         // ===== EMIT EVENTS =====
-        emit LPUnlocked(poolId, cycleId, msg.sender, userTokenId, percentBps, uint256(liquidityReceived), ptAmount, ytAmount);
+        emit LPTokenized(poolId, cycleId, msg.sender, userTokenId, percentBps, uint256(liquidityReceived), ptAmount, ytAmount);
         LibLiquidity.emitTvlUpdated(poolId, cycleId, pool);
 
         // ===== REENTRANCY GUARD EXIT =====
@@ -206,17 +206,17 @@ contract LPUnlockFacet {
     // ============================================================
 
     /**
-     * @notice Preview PT/YT tokens that would be minted for unlocking a position
+     * @notice Preview PT/YT tokens that would be minted for tokenizing a position
      * @dev Read-only estimation based on current pool price
      *
      * @param adapter Address of the liquidity adapter
      * @param poolParams Encoded pool parameters
      * @param userTokenId NFT token ID of the user's LP position
-     * @param percentBps Percentage of position to unlock (1-10000)
+     * @param percentBps Percentage of position to tokenize (1-10000)
      * @return expectedPT Expected PT tokens (value in quote, 18 decimals)
      * @return expectedYT Expected YT tokens (value in quote, 18 decimals)
      */
-    function previewUnlockPosition(
+    function previewTokenizePosition(
         address adapter,
         bytes calldata poolParams,
         uint256 userTokenId,
@@ -234,11 +234,11 @@ contract LPUnlockFacet {
             abi.encode(userTokenId)
         );
 
-        uint128 liquidityToUnlock = uint128(uint256(posLiquidity) * percentBps / 10000);
+        uint128 liquidityToTokenize = uint128(uint256(posLiquidity) * percentBps / 10000);
 
         // Preview token amounts from removing this liquidity
         (uint256 amount0, uint256 amount1) = adapterContract.previewRemoveLiquidity(
-            liquidityToUnlock,
+            liquidityToTokenize,
             poolParams
         );
 

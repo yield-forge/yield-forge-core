@@ -26,8 +26,8 @@ The protocol uses the **Diamond Pattern** for upgradeability and modular design:
 └────────┘ └────────┘ └───────────┘ └─────────┘ └──────────┘
                 │
            ┌────┴────┐
-           │LPUnlock │
-           │ Facet   │
+           │  LP     │
+           │Tokenize │
            └─────────┘
 ```
 
@@ -81,7 +81,7 @@ struct AppStorage {
 
 ### Key Features
 
-- **LP Unlock**: One-click conversion of existing LP positions to PT/YT tokens
+- **LP Tokenize**: One-click conversion of existing LP positions to PT/YT tokens
 - **Time-Aware PT AMM**: Price automatically converges to dynamic maturity target V(t) at maturity
 - **YT Orderbook**: Peer-to-peer trading preserving yield rights until fill
 - **Yield Metrics**: Historical APY and YT fair value calculation
@@ -93,6 +93,7 @@ struct AppStorage {
 3. **Reentrancy Guards**: All state-changing functions protected
 4. **Pausable**: Emergency pause mechanism across protocol
 5. **Adapter Whitelisting**: Only approved adapters can be used
+6. **Adapter Deprecation**: Graceful wind-down of pools when adapters are replaced — current cycle completes, no new cycles start
 
 ## Related Documentation
 

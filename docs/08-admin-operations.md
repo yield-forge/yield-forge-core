@@ -21,6 +21,8 @@ RPC_URL=<rpc_endpoint>
 | Approve Adapter | `pnpm admin:approve-adapter <address>` |
 | Approve Quote Token | `pnpm admin:approve-quote-token <address>` |
 | Register Pool | `pnpm admin:register-pool <adapter> <params> <quote>` |
+| Deprecate Adapter | `cast send $DIAMOND "deprecateAdapter(address)" <adapter>` |
+| Undeprecate Adapter | `cast send $DIAMOND "undeprecateAdapter(address)" <adapter>` |
 
 ---
 
@@ -122,6 +124,49 @@ pnpm admin:register-pool \
 
 ---
 
+## 4. Deprecate Adapter
+
+Mark an adapter for graceful wind-down. Pools using this adapter will finish their current cycle but no new cycles will start.
+
+```bash
+cast send $DIAMOND "deprecateAdapter(address)" 0xOldAdapterAddress \
+    --private-key $PRIVATE_KEY --rpc-url $RPC_URL
+```
+
+**Effects:**
+- Current active cycles run to completion (users can still add liquidity, harvest, claim, trade)
+- After the current cycle matures, no new cycle is created
+- Redemption and yield claims are never blocked
+
+**Verify:**
+```bash
+cast call $DIAMOND "isAdapterDeprecated(address)(bool)" 0xOldAdapterAddress
+cast call $DIAMOND "isPoolFinished(bytes32)(bool)" $POOL_ID
+```
+
+### Undeprecate (Rollback)
+
+```bash
+cast send $DIAMOND "undeprecateAdapter(address)" 0xAdapterAddress \
+    --private-key $PRIVATE_KEY --rpc-url $RPC_URL
+```
+
+### Adapter Transition Workflow
+
+To upgrade an adapter (e.g., deploy a new version with bug fixes or new features):
+
+```
+1. Deploy new adapter contract
+2. Approve new adapter:          pnpm admin:approve-adapter <newAdapter>
+3. Deprecate old adapter:        cast send $DIAMOND "deprecateAdapter(address)" <oldAdapter>
+4. Wait for current cycles to mature (up to 90 days)
+5. Register same pools with new adapter:
+   pnpm admin:register-pool <newAdapter> <poolParams> <quoteToken>
+6. Revoke old adapter (optional): pnpm admin:revoke-adapter <oldAdapter>
+```
+
+---
+
 ## Verification
 
 After registration, verify via:
@@ -139,6 +184,13 @@ cast call $DIAMOND "getPoolInfo(bytes32)" $POOL_ID
 3. Approve Quote Tokens      → pnpm admin:approve-quote-token <address>
 4. Register Pools            → pnpm admin:register-pool <adapter> <params> <quote>
 5. Users can now addLiquidity → starts Cycle #1
+
+Adapter upgrade:
+6. Deploy new adapter        → ADAPTER=NewAdapter pnpm deploy:adapters
+7. Approve new adapter       → pnpm admin:approve-adapter <newAdapter>
+8. Deprecate old adapter     → cast send $DIAMOND "deprecateAdapter(address)" <old>
+9. Wait for cycle maturity   → cast call $DIAMOND "isPoolFinished(bytes32)(bool)" <poolId>
+10. Re-register pools        → pnpm admin:register-pool <newAdapter> <params> <quote>
 ```
 
 ---

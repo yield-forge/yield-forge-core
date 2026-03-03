@@ -529,6 +529,17 @@
   },
   {
     "type": "error",
+    "name": "AdapterDeprecated",
+    "inputs": [
+      {
+        "name": "adapter",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "EnforcedPause",
     "inputs": []
   },

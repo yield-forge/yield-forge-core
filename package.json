@@ -16,6 +16,8 @@
     "admin:approve-adapter": "dotenv -- sh -c 'forge script script/ApproveAdapter.s.sol:ApproveAdapter --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address)\" $1' _",
     "admin:approve-quote-token": "dotenv -- sh -c 'forge script script/ApproveQuoteToken.s.sol:ApproveQuoteToken --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address)\" $1' _",
     "admin:register-pool": "dotenv -- sh -c 'forge script script/RegisterPool.s.sol:RegisterPool --rpc-url $RPC_URL --broadcast -vvvv --sig \"run(address,bytes,address)\" $1 $2 $3' _",
+    "deploy:governance": "dotenv -- sh -c 'forge script script/DeployGovernance.s.sol:DeployGovernance --rpc-url $RPC_URL --broadcast -vvvv'",
+    "deploy:governance:dry": "dotenv -- sh -c 'forge script script/DeployGovernance.s.sol:DeployGovernance --rpc-url $RPC_URL -vvvv'",
     "dev:mint-tokens": "./dev-scripts/mint-tokens.sh",
     "export:abi": "node scripts/export-abi.js"
   },

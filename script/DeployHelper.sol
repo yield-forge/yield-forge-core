@@ -17,7 +17,7 @@ import {RedemptionFacet} from "../src/facets/RedemptionFacet.sol";
 import {YieldForgeMarketFacet} from "../src/facets/YieldForgeMarketFacet.sol";
 import {PauseFacet} from "../src/facets/PauseFacet.sol";
 import {YTOrderbookFacet} from "../src/facets/YTOrderbookFacet.sol";
-import {LPUnlockFacet} from "../src/facets/LPUnlockFacet.sol";
+import {LPTokenizeFacet} from "../src/facets/LPTokenizeFacet.sol";
 
 contract DeployHelper {
     // Helper to create a FacetCut struct
@@ -105,7 +105,7 @@ contract DeployHelper {
         // Missing getters
         // getActivePT, getActiveYT, getPoolTokens, getPoolAdapter
         // Let's expand array
-        bytes4[] memory expandedSelectors = new bytes4[](25);
+        bytes4[] memory expandedSelectors = new bytes4[](31);
         for (uint256 i = 0; i < 21; i++) {
             expandedSelectors[i] = selectors[i];
         }
@@ -113,6 +113,14 @@ contract DeployHelper {
         expandedSelectors[22] = PoolRegistryFacet.getActiveYT.selector;
         expandedSelectors[23] = PoolRegistryFacet.getPoolTokens.selector;
         expandedSelectors[24] = PoolRegistryFacet.getPoolAdapter.selector;
+        // Adapter deprecation + pool lifecycle
+        expandedSelectors[25] = PoolRegistryFacet.deprecateAdapter.selector;
+        expandedSelectors[26] = PoolRegistryFacet.undeprecateAdapter.selector;
+        expandedSelectors[27] = PoolRegistryFacet.isAdapterDeprecated.selector;
+        expandedSelectors[28] = PoolRegistryFacet.isPoolFinished.selector;
+        expandedSelectors[29] = PoolRegistryFacet.getActivePoolForExternal.selector;
+        // Migration
+        expandedSelectors[30] = PoolRegistryFacet.backfillExternalPoolMappings.selector;
 
         return expandedSelectors;
     }
@@ -196,10 +204,10 @@ contract DeployHelper {
         return selectors;
     }
 
-    function getLPUnlockSelectors() internal pure returns (bytes4[] memory) {
+    function getLPTokenizeSelectors() internal pure returns (bytes4[] memory) {
         bytes4[] memory selectors = new bytes4[](2);
-        selectors[0] = LPUnlockFacet.unlockPosition.selector;
-        selectors[1] = LPUnlockFacet.previewUnlockPosition.selector;
+        selectors[0] = LPTokenizeFacet.tokenizePosition.selector;
+        selectors[1] = LPTokenizeFacet.previewTokenizePosition.selector;
         return selectors;
     }
 }

@@ -16,7 +16,7 @@ import {YieldAccumulatorFacet} from "../src/facets/YieldAccumulatorFacet.sol";
 import {RedemptionFacet} from "../src/facets/RedemptionFacet.sol";
 import {YieldForgeMarketFacet} from "../src/facets/YieldForgeMarketFacet.sol";
 import {PauseFacet} from "../src/facets/PauseFacet.sol";
-import {LPUnlockFacet} from "../src/facets/LPUnlockFacet.sol";
+import {LPTokenizeFacet} from "../src/facets/LPTokenizeFacet.sol";
 
 /**
  * @title Upgrade Script
@@ -99,7 +99,7 @@ contract Upgrade is Script, DeployHelper {
             "RedemptionFacet",
             "YieldForgeMarketFacet",
             "PauseFacet",
-            "LPUnlockFacet",
+            "LPTokenizeFacet",
             "DiamondLoupeFacet"
         ];
 
@@ -135,9 +135,9 @@ contract Upgrade is Script, DeployHelper {
         } else if (_strEq(facetName, "OwnershipFacet")) {
             facet = address(new OwnershipFacet());
             selectors = getOwnershipSelectors();
-        } else if (_strEq(facetName, "LPUnlockFacet")) {
-            facet = address(new LPUnlockFacet());
-            selectors = getLPUnlockSelectors();
+        } else if (_strEq(facetName, "LPTokenizeFacet")) {
+            facet = address(new LPTokenizeFacet());
+            selectors = getLPTokenizeSelectors();
         }
     }
 

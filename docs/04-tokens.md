@@ -86,7 +86,7 @@ Example: YF-PT-A3F2E9-JAN2025
 ### Lifecycle
 
 ```
-1. User deposits tokens via addLiquidity() or unlockPosition()
+1. User deposits tokens via addLiquidity() or tokenizePosition()
        │
        ▼
 2. Diamond calculates total value in quote token
@@ -275,7 +275,7 @@ function claimYield(poolId, cycleId) returns (uint256 amount0, uint256 amount1);
 
 ## Token Factory
 
-New tokens are created by `LibLiquidity.startNewCycle()` (shared library used by both `LiquidityFacet` and `LPUnlockFacet`):
+New tokens are created by `LibLiquidity.startNewCycle()` (shared library used by both `LiquidityFacet` and `LPTokenizeFacet`):
 
 ```solidity
 function _startNewCycle(bytes32 poolId) internal {
@@ -310,7 +310,7 @@ function _startNewCycle(bytes32 poolId) internal {
 | **Sell immediately**  | Lock in fixed yield by selling YT, keeping PT            |
 | **Buy at discount**   | Purchase discounted PT for guaranteed profit at maturity |
 | **Provide liquidity** | Add PT to YieldForge Market for LP fees                  |
-| **LP Unlock**         | Convert existing LP position to PT/YT via LPUnlockFacet |
+| **LP Tokenize**         | Convert existing LP position to PT/YT via LPTokenizeFacet |
 
 ### YT Strategies
 

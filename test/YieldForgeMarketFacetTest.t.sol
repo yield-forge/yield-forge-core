@@ -463,5 +463,5 @@ contract MockMarketAdapter is ILiquidityAdapter {
         return (0, 0);
     }
 
-    function unlockPosition(bytes calldata) external override returns (uint128, uint256, uint256) { return (0, 0, 0); }
+    function tokenizePosition(bytes calldata) external override returns (uint128, uint256, uint256) { return (0, 0, 0); }
 }

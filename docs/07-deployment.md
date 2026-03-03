@@ -155,7 +155,7 @@ FACET=all pnpm facet:upgrade
 
 - `PoolRegistryFacet`
 - `LiquidityFacet`
-- `LPUnlockFacet`
+- `LPTokenizeFacet`
 - `YieldAccumulatorFacet`
 - `RedemptionFacet`
 - `YieldForgeMarketFacet`
@@ -184,6 +184,20 @@ The upgrade script automatically:
 ### Production Note
 
 If the Diamond is owned by a Timelock, direct upgrades will fail. Use the `proposeDiamondCut` flow instead.
+
+---
+
+## Adapter Deprecation & Upgrade
+
+When an adapter needs to be replaced (bug fix, new features):
+
+1. Deploy new adapter: `ADAPTER=UniswapV4Adapter pnpm deploy:adapters`
+2. Approve new adapter: `pnpm admin:approve-adapter <newAddress>`
+3. Deprecate old adapter: `cast send $DIAMOND "deprecateAdapter(address)" <oldAddress>`
+4. Wait for active cycles to mature (check with `isPoolFinished`)
+5. Register same pools with new adapter: `pnpm admin:register-pool <new> <params> <quote>`
+
+See [Admin Operations](./08-admin-operations.md) for detailed commands.
 
 ---
 

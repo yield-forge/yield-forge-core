@@ -80,6 +80,9 @@ contract PoolRegistryFacet {
     /// @notice Emitted when an adapter is approved or revoked
     event AdapterStatusChanged(address indexed adapter, bool approved);
 
+    /// @notice Emitted when an adapter is deprecated or undeprecated
+    event AdapterDeprecated(address indexed adapter, bool deprecated);
+
     /// @notice Emitted when pool guardian is set
     event PoolGuardianSet(address indexed oldGuardian, address indexed newGuardian);
 
@@ -122,6 +125,18 @@ contract PoolRegistryFacet {
 
     /// @notice Adapter not currently approved
     error AdapterNotCurrentlyApproved(address adapter);
+
+    /// @notice Adapter is deprecated (no new cycles/liquidity)
+    error AdapterIsDeprecated(address adapter);
+
+    /// @notice Adapter already deprecated
+    error AdapterAlreadyDeprecated(address adapter);
+
+    /// @notice Another pool for the same underlying is still active
+    error ExternalPoolStillActive(bytes32 externalPoolId, bytes32 existingPoolId);
+
+    /// @notice Adapter not currently deprecated
+    error AdapterNotDeprecated(address adapter);
 
     /// @notice Pool already exists
     error PoolAlreadyExists(bytes32 poolId);
@@ -288,6 +303,63 @@ contract PoolRegistryFacet {
         return LibAppStorage.diamondStorage().approvedAdapters[adapter];
     }
 
+    /**
+     * @notice Deprecate an adapter — wind down all pools using it
+     * @dev Deprecated adapters:
+     *      - No new cycles can start (ensureActiveCycle blocks this)
+     *      - Current active cycle runs until maturity normally
+     *      - Users can still add liquidity to the current active cycle
+     *      - Users can always redeem PT, claim yield, and exit
+     *
+     * Also revokes approval to prevent new pool registrations.
+     *
+     * @param adapter Address of the adapter to deprecate
+     */
+    function deprecateAdapter(address adapter) external onlyOwner {
+        if (adapter == address(0)) revert ZeroAddress();
+
+        LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
+        if (s.deprecatedAdapters[adapter]) {
+            revert AdapterAlreadyDeprecated(adapter);
+        }
+        s.deprecatedAdapters[adapter] = true;
+
+        // Also revoke approval (prevent new pool registrations)
+        if (s.approvedAdapters[adapter]) {
+            s.approvedAdapters[adapter] = false;
+            emit AdapterStatusChanged(adapter, false);
+        }
+
+        emit AdapterDeprecated(adapter, true);
+    }
+
+    /**
+     * @notice Undeprecate an adapter (reversal)
+     * @dev Does NOT re-approve — call approveAdapter separately if needed
+     *
+     * @param adapter Address of the adapter to undeprecate
+     */
+    function undeprecateAdapter(address adapter) external onlyOwner {
+        if (adapter == address(0)) revert ZeroAddress();
+
+        LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
+        if (!s.deprecatedAdapters[adapter]) {
+            revert AdapterNotDeprecated(adapter);
+        }
+        s.deprecatedAdapters[adapter] = false;
+
+        emit AdapterDeprecated(adapter, false);
+    }
+
+    /**
+     * @notice Check if adapter is deprecated
+     * @param adapter Address to check
+     * @return True if deprecated
+     */
+    function isAdapterDeprecated(address adapter) external view returns (bool) {
+        return LibAppStorage.diamondStorage().deprecatedAdapters[adapter];
+    }
+
     // ============================================================
     //                  QUOTE TOKEN MANAGEMENT
     // ============================================================
@@ -413,6 +485,26 @@ contract PoolRegistryFacet {
             revert PoolAlreadyExists(poolId);
         }
 
+        // Check no other active pool exists for the same underlying
+        // externalPoolId identifies the underlying pool (e.g., Uniswap V4 PoolId)
+        bytes32 externalPoolId = keccak256(poolParams);
+        bytes32 existingPoolId = s.externalToActivePool[externalPoolId];
+        if (existingPoolId != bytes32(0) && existingPoolId != poolId) {
+            // An entry exists — only allow replacement if the old pool is "finished":
+            // adapter deprecated AND (no cycles OR last cycle matured)
+            LibAppStorage.PoolInfo storage existingPool = s.pools[existingPoolId];
+            bool finished = s.deprecatedAdapters[existingPool.adapter];
+            if (finished) {
+                uint256 eCycleId = s.currentCycleId[existingPoolId];
+                if (eCycleId != 0) {
+                    finished = block.timestamp >= s.cycles[existingPoolId][eCycleId].maturityDate;
+                }
+            }
+            if (!finished) {
+                revert ExternalPoolStillActive(externalPoolId, existingPoolId);
+            }
+        }
+
         // Get token addresses from adapter
         (address token0, address token1) = adapterContract.getPoolTokens(poolParams);
 
@@ -442,9 +534,9 @@ contract PoolRegistryFacet {
             quoteDecimals: quoteDecimals
         });
 
-        // externalPoolId = keccak256(poolParams) - matches Uniswap V4 PoolId format
-        // Used for external links (e.g., Uniswap explore page)
-        bytes32 externalPoolId = keccak256(poolParams);
+        // Track active pool for this underlying
+        s.externalToActivePool[externalPoolId] = poolId;
+
         emit PoolRegistered(poolId, adapter, token0, token1, quoteToken, externalPoolId);
     }
 
@@ -691,5 +783,59 @@ contract PoolRegistryFacet {
      */
     function getPoolAdapter(bytes32 poolId) external view returns (address) {
         return LibAppStorage.diamondStorage().pools[poolId].adapter;
+    }
+
+    /**
+     * @notice Check if a pool is finished (deprecated adapter + last cycle matured)
+     * @dev A finished pool can be replaced by registering the same underlying with a new adapter
+     * @param poolId Pool identifier
+     * @return True if pool is finished
+     */
+    function isPoolFinished(bytes32 poolId) external view returns (bool) {
+        LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
+        LibAppStorage.PoolInfo storage pool = s.pools[poolId];
+        if (!pool.exists) return false;
+        if (!s.deprecatedAdapters[pool.adapter]) return false;
+
+        uint256 cycleId = s.currentCycleId[poolId];
+        if (cycleId == 0) return true; // Never used — immediately finished
+
+        return block.timestamp >= s.cycles[poolId][cycleId].maturityDate;
+    }
+
+    /**
+     * @notice Get the active YieldForge poolId for an underlying pool
+     * @param externalPoolId keccak256(poolParams) — identifies the underlying pool
+     * @return Active poolId (bytes32(0) if none registered)
+     */
+    function getActivePoolForExternal(bytes32 externalPoolId) external view returns (bytes32) {
+        return LibAppStorage.diamondStorage().externalToActivePool[externalPoolId];
+    }
+
+    // ============================================================
+    //                       MIGRATION
+    // ============================================================
+
+    /**
+     * @notice Backfill externalToActivePool mapping for pools registered before this upgrade
+     * @dev One-time migration: sets externalToActivePool[keccak256(poolParams)] = poolId
+     *      for each provided pool. Without this, duplicate prevention won't work
+     *      for pre-existing pools during adapter transitions.
+     *
+     *      Safe to call multiple times — idempotent (overwrites with same value).
+     *      Should be called once after upgrading PoolRegistryFacet.
+     *
+     * @param poolIds Array of existing pool IDs to backfill
+     */
+    function backfillExternalPoolMappings(bytes32[] calldata poolIds) external onlyOwner {
+        LibAppStorage.AppStorage storage s = LibAppStorage.diamondStorage();
+
+        for (uint256 i = 0; i < poolIds.length; i++) {
+            LibAppStorage.PoolInfo storage pool = s.pools[poolIds[i]];
+            if (!pool.exists) revert PoolNotFound(poolIds[i]);
+
+            bytes32 externalPoolId = keccak256(pool.poolParams);
+            s.externalToActivePool[externalPoolId] = poolIds[i];
+        }
     }
 }

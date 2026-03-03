@@ -437,6 +437,16 @@ library LibAppStorage {
         /// @dev adapter address → isApproved
         /// Only approved adapters can be used for pool registration
         mapping(address => bool) approvedAdapters;
+        /// @notice Mapping of deprecated adapters
+        /// @dev adapter address → isDeprecated
+        /// Deprecated adapters: no new cycles start after current cycle matures.
+        /// Current active cycle runs normally. Users can always redeem/claim.
+        mapping(address => bool) deprecatedAdapters;
+        /// @notice Maps underlying pool identity → active YieldForge poolId
+        /// @dev externalPoolId = keccak256(poolParams) identifies the underlying pool
+        /// Prevents duplicate registration for same underlying during adapter transition.
+        /// Updated on registerPool(); checked to ensure old pool is finished before replacement.
+        mapping(bytes32 => bytes32) externalToActivePool;
         /// @notice Mapping of approved quote tokens for secondary markets
         /// @dev token address → isApproved
         /// Whitelist: USDC, WETH, DAI etc.
@@ -466,8 +476,8 @@ library LibAppStorage {
 
         /// @notice Reserved slots for future upgrades
         /// @dev Add new fields BEFORE this gap, decrease gap size accordingly
-        /// Reduced from 50 to 46 after adding YT orderbook fields
-        uint256[46] __gap;
+        /// 50 → 46 (YT orderbook fields) → 44 (deprecatedAdapters + externalToActivePool)
+        uint256[44] __gap;
     }
 
     // ============================================================

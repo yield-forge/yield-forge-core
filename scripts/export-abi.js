@@ -27,8 +27,10 @@ const FACETS = [
   "DiamondCutFacet",
   "DiamondLoupeFacet",
   "OwnershipFacet",
-  "LPUnlockFacet",
+  "LPTokenizeFacet",
   "DiamondTimelock",
+  "YieldForgeToken",
+  "MerkleClaim",
 ];
 
 function main() {

@@ -428,16 +428,16 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     }
 
     // ============================================================
-    //                       LP UNLOCK
+    //                    LP TOKENIZATION
     // ============================================================
 
     /**
-     * @notice Unlock a user's V3 LP position into the protocol
+     * @notice Tokenize a user's V3 LP position into the protocol
      * @dev Withdraws liquidity (+ accumulated fees) from the user's NFT position
      *      and deposits it into the protocol's aggregated full-range position.
      *
      * PREREQUISITES: The user's NFT must already be transferred to this adapter
-     * by the calling facet (LPUnlockFacet). The adapter transfers it back after.
+     * by the calling facet (LPTokenizeFacet). The adapter transfers it back after.
      *
      * FLOW:
      * 1. Decode params (pool, userTokenId, percentBps, user)
@@ -450,12 +450,12 @@ contract UniswapV3Adapter is ILiquidityAdapter {
      * 8. Add collected tokens to protocol's position
      * 9. Refund dust to Diamond
      *
-     * @param unlockParams abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
+     * @param tokenizeParams abi.encode(bytes poolParams, uint256 userTokenId, uint16 percentBps, address user)
      * @return liquidity LP units added to the protocol's position
      * @return amount0 Token0 amount deposited into protocol
      * @return amount1 Token1 amount deposited into protocol
      */
-    function unlockPosition(bytes calldata unlockParams)
+    function tokenizePosition(bytes calldata tokenizeParams)
         external
         override
         onlyDiamond
@@ -463,7 +463,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     {
         // Decode outer params
         (bytes memory poolParamsInner, uint256 userTokenId, uint16 percentBps, address user) =
-            abi.decode(unlockParams, (bytes, uint256, uint16, address));
+            abi.decode(tokenizeParams, (bytes, uint256, uint16, address));
 
         address pool = abi.decode(poolParamsInner, (address));
 
@@ -500,7 +500,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         if (liquidityToRemove == 0) revert InsufficientLiquidity();
 
         // --- Decrease user's liquidity ---
-        // NFT was transferred to this adapter by LPUnlockFacet
+        // NFT was transferred to this adapter by LPTokenizeFacet
         positionManager.decreaseLiquidity(
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: userTokenId,
@@ -549,7 +549,7 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         if (remaining0 > 0) IERC20(posToken0).safeTransfer(diamond, remaining0);
         if (remaining1 > 0) IERC20(posToken1).safeTransfer(diamond, remaining1);
 
-        emit PositionUnlocked(user, userTokenId, liquidity, amount0, amount1);
+        emit PositionTokenized(user, userTokenId, liquidity, amount0, amount1);
     }
 
     // ============================================================
