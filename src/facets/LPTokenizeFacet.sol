@@ -229,10 +229,8 @@ contract LPTokenizeFacet {
         // If pool is not registered, we can still estimate using adapter's preview
         ILiquidityAdapter adapterContract = ILiquidityAdapter(adapter);
 
-        // Get position liquidity and calculate proportional amounts
-        uint128 posLiquidity = adapterContract.getPositionLiquidity(
-            abi.encode(userTokenId)
-        );
+        // Get user's position liquidity
+        uint128 posLiquidity = adapterContract.getPositionLiquidity(abi.encode(userTokenId));
 
         uint128 liquidityToTokenize = uint128(uint256(posLiquidity) * percentBps / 10000);
 

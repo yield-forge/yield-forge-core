@@ -692,22 +692,10 @@ contract UniswapV4Adapter is ILiquidityAdapter, IUnlockCallback {
     //                      VIEW FUNCTIONS
     // ============================================================
 
-    /**
-     * @notice Get current liquidity in a position
-     * @param params Encoded PoolKey
-     * @return liquidity Current position liquidity
-     */
+    /// @inheritdoc ILiquidityAdapter
     function getPositionLiquidity(bytes calldata params) external view override returns (uint128 liquidity) {
-        PoolKey memory poolKey = abi.decode(params, (PoolKey));
-
-        int24 tickLower = (TickMath.MIN_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
-        int24 tickUpper = (TickMath.MAX_TICK / poolKey.tickSpacing) * poolKey.tickSpacing;
-
-        // Get position info from pool manager
-        // Position ID is hash of (owner, tickLower, tickUpper, salt)
-        bytes32 positionKey = Position.calculatePositionKey(address(this), tickLower, tickUpper, bytes32(0));
-
-        (liquidity,,) = poolManager.getPositionInfo(poolKey.toId(), positionKey);
+        uint256 tokenId = abi.decode(params, (uint256));
+        liquidity = positionManager.getPositionLiquidity(tokenId);
     }
 
     /**

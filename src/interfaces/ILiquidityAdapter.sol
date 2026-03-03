@@ -206,11 +206,15 @@ interface ILiquidityAdapter {
     // ============================================================
 
     /**
-     * @notice Get current liquidity amount for a position
-     * @dev Used to calculate user's share of the pool
+     * @notice Get liquidity of a user's LP position
+     * @dev Used by LPTokenizeFacet.previewTokenizePosition to preview PT/YT amounts.
      *
-     * @param params Parameters identifying the position
-     * @return liquidity Current liquidity amount
+     * Encoding depends on the protocol:
+     * - NFT-based (Uniswap V3/V4): abi.encode(uint256 tokenId)
+     * - ERC-20 LP (Curve, etc.): abi.encode(address user, <pool identifier>)
+     *
+     * @param params Adapter-specific encoded position identifier
+     * @return liquidity Liquidity amount in the position
      */
     function getPositionLiquidity(bytes calldata params) external view returns (uint128 liquidity);
 

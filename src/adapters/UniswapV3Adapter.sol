@@ -610,18 +610,9 @@ contract UniswapV3Adapter is ILiquidityAdapter {
     //                      VIEW FUNCTIONS
     // ============================================================
 
-    /**
-     * @notice Get current liquidity in position
-     * @param params Encoded pool address
-     * @return liquidity Current position liquidity
-     */
+    /// @inheritdoc ILiquidityAdapter
     function getPositionLiquidity(bytes calldata params) external view override returns (uint128 liquidity) {
-        address pool = abi.decode(params, (address));
-        uint256 tokenId = poolToTokenId[pool];
-
-        if (tokenId == 0) return 0;
-
-        // Get position info from NFT
+        uint256 tokenId = abi.decode(params, (uint256));
         (,,,,,,, liquidity,,,,) = positionManager.positions(tokenId);
     }
 
