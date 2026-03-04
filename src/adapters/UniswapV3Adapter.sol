@@ -650,10 +650,6 @@ contract UniswapV3Adapter is ILiquidityAdapter {
         returns (uint256 amount0, uint256 amount1)
     {
         address pool = abi.decode(params, (address));
-        uint256 tokenId = poolToTokenId[pool];
-
-        if (tokenId == 0) return (0, 0);
-
         IUniswapV3Pool v3Pool = IUniswapV3Pool(pool);
         (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
         int24 tickSpacing = v3Pool.tickSpacing();
